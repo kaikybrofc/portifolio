@@ -10,7 +10,12 @@ const AboutSection = () => {
   useEffect(() => {
     const fetchGitHubData = async () => {
       try {
-        const response = await fetch("https://api.github.com/users/kaikybrofc");
+        const response = await fetch("/api/github/users/kaikybrofc");
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch GitHub profile");
+        }
+
         const data = await response.json();
         setUserData(data);
       } catch (error) {

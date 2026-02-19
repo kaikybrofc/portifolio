@@ -33,3 +33,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Local database cache
+data/*.sqlite
+data/*.sqlite-*

@@ -17,8 +17,13 @@ const SkillsSection = () => {
     const fetchLanguages = async () => {
       try {
         const response = await fetch(
-          "https://api.github.com/users/kaikybrofc/repos?per_page=100"
+          "/api/github/users/kaikybrofc/repos?per_page=100"
         );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch repository languages");
+        }
+
         const repos = await response.json();
 
         // Collect unique languages from all repos
