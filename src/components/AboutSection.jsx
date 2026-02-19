@@ -169,26 +169,32 @@ const AboutSection = () => {
                       e transformação digital.
                     </p>
 
-                    <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-                      <div className="p-4 bg-gray-700/50 rounded-lg border border-cyan-400/30">
-                        <p className="text-3xl font-bold text-cyan-400">
+                    <div className="mt-8 grid grid-cols-3 gap-2 sm:gap-4 text-center">
+                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-cyan-400/30">
+                        <p className="text-2xl sm:text-3xl font-bold text-cyan-400">
                           {userData?.public_repos || 0}
                         </p>
-                        <p className="text-sm text-gray-400 mt-1">Repositórios</p>
+                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
+                          Repositórios
+                        </p>
                       </div>
                       
-                      <div className="p-4 bg-gray-700/50 rounded-lg border border-pink-500/30">
-                        <p className="text-3xl font-bold text-pink-500">
+                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-pink-500/30">
+                        <p className="text-2xl sm:text-3xl font-bold text-pink-500">
                           {userData?.followers || 0}
                         </p>
-                        <p className="text-sm text-gray-400 mt-1">Seguidores</p>
+                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
+                          Seguidores
+                        </p>
                       </div>
                       
-                      <div className="p-4 bg-gray-700/50 rounded-lg border border-cyan-300/30">
-                        <p className="text-3xl font-bold text-cyan-300">
+                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-cyan-300/30">
+                        <p className="text-2xl sm:text-3xl font-bold text-cyan-300">
                           {userData?.following || 0}
                         </p>
-                        <p className="text-sm text-gray-400 mt-1">Seguindo</p>
+                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
+                          Seguindo
+                        </p>
                       </div>
                     </div>
                   </div>
