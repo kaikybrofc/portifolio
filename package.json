@@ -2,6 +2,7 @@
 	"name": "portifolio",
 	"type": "module",
 	"version": "1.0.0",
+	"license": "MIT",
 	"private": false,
 	"scripts": {
 		"dev": "vite --host :: --port 3005",
