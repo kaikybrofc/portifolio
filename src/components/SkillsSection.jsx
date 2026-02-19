@@ -9,6 +9,7 @@ import {
   Palette,
   GitBranch,
 } from "lucide-react";
+import { fetchGitHubRepos } from "@/lib/githubApi";
 
 const SkillsSection = () => {
   const [languages, setLanguages] = useState([]);
@@ -16,15 +17,7 @@ const SkillsSection = () => {
   useEffect(() => {
     const fetchLanguages = async () => {
       try {
-        const response = await fetch(
-          "/api/github/users/kaikybrofc/repos?per_page=100"
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch repository languages");
-        }
-
-        const repos = await response.json();
+        const repos = await fetchGitHubRepos("kaikybrofc", "per_page=100");
 
         // Collect unique languages from all repos
         const languageSet = new Set();

@@ -3,6 +3,7 @@ import { NeonText } from "@/components/NeonGlow";
 import ProjectCard from "@/components/ProjectCard";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
+import { fetchGitHubRepos } from "@/lib/githubApi";
 
 const ProjectsSection = () => {
   const [repos, setRepos] = useState([]);
@@ -12,15 +13,10 @@ const ProjectsSection = () => {
   useEffect(() => {
     const fetchRepositories = async () => {
       try {
-        const response = await fetch(
-          "/api/github/users/kaikybrofc/repos?sort=updated&per_page=100"
+        const data = await fetchGitHubRepos(
+          "kaikybrofc",
+          "sort=updated&per_page=100"
         );
-        
-        if (!response.ok) {
-          throw new Error("Failed to fetch repositories");
-        }
-
-        const data = await response.json();
         
         // Sort by stars and updated date, filter out forks, take top 6
         const filteredRepos = data

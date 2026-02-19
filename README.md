@@ -54,6 +54,7 @@ Variaveis opcionais:
 - `GITHUB_CACHE_TTL_MS` (padrao `900000`, 15 min)
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
+- `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
 
 ## Build de producao
 
