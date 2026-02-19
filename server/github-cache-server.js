@@ -1,7 +1,12 @@
 import { createServer } from "node:http";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+
+const envFilePath = join(process.cwd(), ".env");
+if (existsSync(envFilePath) && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(envFilePath);
+}
 
 const PORT = Number(process.env.API_PORT || 8787);
 const CACHE_TTL_MS = Number(
@@ -385,6 +390,7 @@ server.listen(PORT, () => {
   console.log(`[github-cache] API pronta em http://localhost:${PORT}`);
   console.log(`[github-cache] SQLite em ${DB_PATH}`);
   console.log(`[github-cache] TTL ${CACHE_TTL_MS}ms`);
+  console.log(`[github-cache] GitHub token ${GITHUB_TOKEN ? "enabled" : "disabled"}`);
 });
 
 const shutdown = () => {

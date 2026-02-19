@@ -7,7 +7,7 @@
 	"scripts": {
 		"dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
 		"dev:web": "vite --host :: --port 3000",
-		"dev:api": "node server/github-cache-server.js",
+		"dev:api": "node --env-file-if-exists=.env server/github-cache-server.js",
 		"build": "[ -f tools/generate-llms.js ] && node tools/generate-llms.js; vite build",
 		"preview": "vite preview --host :: --port 3000",
 		"lint": "eslint . --quiet",
