@@ -1,5 +1,5 @@
 import React from "react";
-import { Github, Linkedin, Mail, Heart } from "lucide-react";
+import { Github, Linkedin, Mail, Heart, Instagram, MessageCircle } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -13,12 +13,22 @@ const Footer = () => {
     {
       name: "LinkedIn",
       icon: <Linkedin size={20} />,
-      url: "https://linkedin.com",
+      url: "https://www.linkedin.com/in/kaikybrofc/",
+    },
+    {
+      name: "Instagram",
+      icon: <Instagram size={20} />,
+      url: "https://www.instagram.com/kaikybrofc/",
+    },
+    {
+      name: "WhatsApp",
+      icon: <MessageCircle size={20} />,
+      url: "https://wa.me/5595991122954",
     },
     {
       name: "Email",
       icon: <Mail size={20} />,
-      url: "mailto:contact@example.com",
+      url: "mailto:kaikyggomesribeiroof@gmail.com",
     },
   ];
 

@@ -1,7 +1,14 @@
 import React, { useState } from "react";
 import { NeonText, NeonBox } from "@/components/NeonGlow";
 import { Button } from "@/components/ui/button";
-import { Mail, Github, Linkedin, Send } from "lucide-react";
+import {
+  Mail,
+  Github,
+  Linkedin,
+  Send,
+  Instagram,
+  MessageCircle,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -57,18 +64,35 @@ const ContactSection = () => {
       icon: <Github size={24} />,
       url: "https://github.com/kaikybrofc",
       color: "cyan",
+      detail: "@kaikybrofc",
     },
     {
       name: "LinkedIn",
       icon: <Linkedin size={24} />,
-      url: "https://linkedin.com",
+      url: "https://www.linkedin.com/in/kaikybrofc/",
       color: "magenta",
+      detail: "/in/kaikybrofc",
+    },
+    {
+      name: "Instagram",
+      icon: <Instagram size={24} />,
+      url: "https://www.instagram.com/kaikybrofc/",
+      color: "pink",
+      detail: "@kaikybrofc",
+    },
+    {
+      name: "WhatsApp",
+      icon: <MessageCircle size={24} />,
+      url: "https://wa.me/5595991122954",
+      color: "green",
+      detail: "+55 95 99112-2954",
     },
     {
       name: "Email",
       icon: <Mail size={24} />,
-      url: "mailto:contact@example.com",
+      url: "mailto:kaikyggomesribeiroof@gmail.com",
       color: "accent",
+      detail: "kaikyggomesribeiroof@gmail.com",
     },
   ];
 
@@ -247,6 +271,8 @@ const ContactSection = () => {
                       const colors = {
                         cyan: "#00ff88",
                         magenta: "#ff00ff",
+                        pink: "#E1306C",
+                        green: "#25D366",
                         accent: "#00ffff",
                       };
                       e.currentTarget.style.borderColor = colors[link.color];
@@ -262,9 +288,7 @@ const ContactSection = () => {
                     </div>
                     <div>
                       <p className="text-white font-semibold">{link.name}</p>
-                      <p className="text-gray-400 text-sm">
-                        {link.name === "Email" ? "contact@example.com" : `@kaikybrofc`}
-                      </p>
+                      <p className="text-gray-400 text-sm">{link.detail}</p>
                     </div>
                   </motion.a>
                 ))}
