@@ -26,6 +26,14 @@ db.exec(`
     fetched_at INTEGER NOT NULL,
     etag TEXT
   );
+  CREATE TABLE IF NOT EXISTS page_visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,
+    referrer TEXT,
+    user_agent TEXT,
+    ip TEXT,
+    visited_at INTEGER NOT NULL
+  );
 `);
 
 const selectCacheStmt = db.prepare(`
@@ -47,6 +55,40 @@ const touchCacheStmt = db.prepare(`
   UPDATE github_cache
   SET fetched_at = ?
   WHERE cache_key = ?
+`);
+
+const insertVisitStmt = db.prepare(`
+  INSERT INTO page_visits (path, referrer, user_agent, ip, visited_at)
+  VALUES (?, ?, ?, ?, ?)
+`);
+
+const selectVisitStatsStmt = db.prepare(`
+  SELECT
+    COUNT(*) AS total_visits,
+    SUM(CASE WHEN visited_at >= ? THEN 1 ELSE 0 END) AS visits_last_24h,
+    SUM(CASE WHEN visited_at >= ? THEN 1 ELSE 0 END) AS visits_last_7d
+  FROM page_visits
+`);
+
+const selectDailyVisitsStmt = db.prepare(`
+  SELECT
+    strftime('%Y-%m-%d', visited_at / 1000, 'unixepoch') AS day,
+    COUNT(*) AS visits
+  FROM page_visits
+  WHERE visited_at >= ?
+  GROUP BY day
+  ORDER BY day DESC
+  LIMIT 7
+`);
+
+const selectTopPathsStmt = db.prepare(`
+  SELECT
+    path,
+    COUNT(*) AS visits
+  FROM page_visits
+  GROUP BY path
+  ORDER BY visits DESC
+  LIMIT 10
 `);
 
 const getGithubUrlFromRequest = (requestUrl) => {
@@ -77,7 +119,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
 
 const withCors = (response) => {
   response.setHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
-  response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 };
 
@@ -91,6 +133,44 @@ const sendJson = (response, statusCode, payload, headers = {}) => {
 };
 
 const parseCachedPayload = (cachedRow) => JSON.parse(cachedRow.payload);
+
+const readJsonBody = async (request) => {
+  const chunks = [];
+
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  const rawBody = Buffer.concat(chunks).toString("utf8").trim();
+
+  if (!rawBody) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+};
+
+const getClientIp = (request) => {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  return request.socket?.remoteAddress || null;
+};
+
+const isValidPath = (value) =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  value.length <= 512 &&
+  value.startsWith("/");
+
+const isValidReferrer = (value) =>
+  value == null || (typeof value === "string" && value.length <= 2048);
 
 const fetchWithCache = async (githubUrl) => {
   const cacheKey = githubUrl;
@@ -219,6 +299,39 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && requestUrl.pathname === "/api/visits") {
+    const body = await readJsonBody(request);
+
+    if (body == null) {
+      sendJson(response, 400, { error: "JSON invalido." });
+      return;
+    }
+
+    const path = body.path || "/";
+    const referrer = body.referrer || null;
+
+    if (!isValidPath(path)) {
+      sendJson(response, 400, { error: "Campo path invalido." });
+      return;
+    }
+
+    if (!isValidReferrer(referrer)) {
+      sendJson(response, 400, { error: "Campo referrer invalido." });
+      return;
+    }
+
+    const userAgentHeader = request.headers["user-agent"];
+    const userAgent =
+      typeof userAgentHeader === "string" ? userAgentHeader.slice(0, 512) : null;
+    const ip = getClientIp(request);
+    const visitedAt = Date.now();
+
+    insertVisitStmt.run(path, referrer, userAgent, ip, visitedAt);
+
+    sendJson(response, 201, { ok: true });
+    return;
+  }
+
   if (request.method !== "GET") {
     sendJson(response, 405, { error: "Metodo nao permitido." });
     return;
@@ -229,6 +342,30 @@ const server = createServer(async (request, response) => {
       status: "ok",
       cache_ttl_ms: CACHE_TTL_MS,
       db_path: DB_PATH,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === "/api/visits/stats") {
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const stats = selectVisitStatsStmt.get(oneDayAgo, sevenDaysAgo);
+    const daily = selectDailyVisitsStmt.all(sevenDaysAgo);
+    const topPaths = selectTopPathsStmt.all();
+
+    sendJson(response, 200, {
+      total_visits: Number(stats?.total_visits || 0),
+      visits_last_24h: Number(stats?.visits_last_24h || 0),
+      visits_last_7d: Number(stats?.visits_last_7d || 0),
+      daily_visits: daily.map((entry) => ({
+        day: entry.day,
+        visits: Number(entry.visits || 0),
+      })),
+      top_paths: topPaths.map((entry) => ({
+        path: entry.path,
+        visits: Number(entry.visits || 0),
+      })),
     });
     return;
   }

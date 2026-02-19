@@ -7,10 +7,12 @@ import SkillsSection from '@/components/SkillsSection';
 import ContactSection from '@/components/ContactSection';
 import Footer from '@/components/Footer';
 import { Toaster } from '@/components/ui/toaster';
+import { trackPageVisit } from '@/lib/visitTracker';
 
 function App() {
   useEffect(() => {
     document.documentElement.style.scrollBehavior = 'smooth';
+    trackPageVisit();
     
     return () => {
       document.documentElement.style.scrollBehavior = 'auto';

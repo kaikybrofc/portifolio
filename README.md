@@ -26,7 +26,7 @@ npm install
 npm run dev
 ```
 
-App local: `http://localhost:3005`  
+App local: `http://localhost:3000`  
 API cache local: `http://localhost:8787`
 
 ## Scripts
@@ -55,6 +55,15 @@ Variaveis opcionais:
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
 - `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
+
+## Visitas da pagina (SQLite)
+
+As visitas da pagina sao registradas automaticamente no carregamento do app.
+
+Endpoints:
+
+- `POST /api/visits` (registro da visita)
+- `GET /api/visits/stats` (total, ultimas 24h, ultimos 7 dias, top paths)
 
 ## Build de producao
 
