@@ -1,63 +1,15 @@
-import React, { useState } from "react";
+import React from "react";
 import { NeonText, NeonBox } from "@/components/NeonGlow";
-import { Button } from "@/components/ui/button";
 import {
   Mail,
   Github,
   Linkedin,
-  Send,
   Instagram,
   MessageCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useToast } from "@/components/ui/use-toast";
 
 const ContactSection = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    message: "",
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    // Simulate form submission
-    setTimeout(() => {
-      toast({
-        title: "Mensagem enviada com sucesso! ✨",
-        description: "Obrigado pelo contato. Responderei em breve!",
-      });
-
-      // Store in localStorage for demonstration
-      const contacts = JSON.parse(localStorage.getItem("contacts") || "[]");
-      contacts.push({
-        ...formData,
-        timestamp: new Date().toISOString(),
-      });
-      localStorage.setItem("contacts", JSON.stringify(contacts));
-
-      // Reset form
-      setFormData({
-        name: "",
-        email: "",
-        message: "",
-      });
-      setIsSubmitting(false);
-    }, 1000);
-  };
-
   const socialLinks = [
     {
       name: "GitHub",
@@ -127,120 +79,10 @@ const ContactSection = () => {
           </p>
         </motion.div>
 
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-8">
-          {/* Contact Form */}
+        <div className="max-w-4xl mx-auto">
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <NeonBox color="cyan" className="p-8 bg-gray-800/50 backdrop-blur-lg">
-              <h3 className="text-2xl font-bold text-white mb-6">
-                <NeonText color="cyan">Envie uma mensagem</NeonText>
-              </h3>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label htmlFor="name" className="block text-gray-300 mb-2 font-medium">
-                    Nome
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 bg-gray-900 border-2 border-cyan-400/30 rounded-lg text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none transition-all"
-                    style={{
-                      boxShadow: "0 0 5px rgba(0, 255, 136, 0.1)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = "0 0 10px rgba(0, 255, 136, 0.4)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = "0 0 5px rgba(0, 255, 136, 0.1)";
-                    }}
-                    placeholder="Seu nome"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="email" className="block text-gray-300 mb-2 font-medium">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 bg-gray-900 border-2 border-cyan-400/30 rounded-lg text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none transition-all"
-                    style={{
-                      boxShadow: "0 0 5px rgba(0, 255, 136, 0.1)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = "0 0 10px rgba(0, 255, 136, 0.4)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = "0 0 5px rgba(0, 255, 136, 0.1)";
-                    }}
-                    placeholder="seu@email.com"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="message" className="block text-gray-300 mb-2 font-medium">
-                    Mensagem
-                  </label>
-                  <textarea
-                    id="message"
-                    name="message"
-                    value={formData.message}
-                    onChange={handleChange}
-                    required
-                    rows={5}
-                    className="w-full px-4 py-3 bg-gray-900 border-2 border-cyan-400/30 rounded-lg text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none transition-all resize-none"
-                    style={{
-                      boxShadow: "0 0 5px rgba(0, 255, 136, 0.1)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = "0 0 10px rgba(0, 255, 136, 0.4)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = "0 0 5px rgba(0, 255, 136, 0.1)";
-                    }}
-                    placeholder="Sua mensagem..."
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-cyan-400 to-pink-500 text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
-                  style={{
-                    boxShadow: "0 0 10px rgba(0, 255, 136, 0.5)",
-                  }}
-                >
-                  {isSubmitting ? (
-                    "Enviando..."
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <Send size={18} />
-                      Enviar Mensagem
-                    </span>
-                  )}
-                </Button>
-              </form>
-            </NeonBox>
-          </motion.div>
-
-          {/* Social Links */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
             className="space-y-6"
