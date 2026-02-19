@@ -8,7 +8,7 @@
 		"dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
 		"dev:web": "vite --host :: --port 3000",
 		"dev:api": "node server/github-cache-server.js",
-		"build": "node tools/generate-llms.js || true && vite build",
+		"build": "[ -f tools/generate-llms.js ] && node tools/generate-llms.js; vite build",
 		"preview": "vite preview --host :: --port 3000",
 		"lint": "eslint . --quiet",
 		"lint:warn": "eslint ."
