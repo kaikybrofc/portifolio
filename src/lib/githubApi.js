@@ -72,13 +72,18 @@ const ALLOW_DIRECT_GITHUB_FALLBACK = (() => {
   const runtimeHostname = getRuntimeHostname();
   const runtimeIsLoopback = isLoopbackHost(runtimeHostname);
 
-  // Browsers on public domains usually block cross-origin API calls with strict CSP.
-  if (import.meta.env.PROD && !runtimeIsLoopback) {
-    return false;
-  }
+  if (import.meta.env.PROD) {
+    // In local preview/testing environments, allow fallback for resilience.
+    if (runtimeIsLoopback) {
+      return directFallbackOverride ?? true;
+    }
 
-  // In production with relative /api routing, keep requests same-origin by default.
-  if (import.meta.env.PROD && USE_RELATIVE_API && !API_BASE_URL) {
+    // On public domains, keep fallback disabled by default to avoid CSP issues.
+    // The deploy can opt-in explicitly with VITE_ALLOW_DIRECT_GITHUB_FALLBACK=true.
+    if (directFallbackOverride === true) {
+      return true;
+    }
+
     return false;
   }
 
