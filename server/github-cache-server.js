@@ -97,9 +97,17 @@ const selectTopPathsStmt = db.prepare(`
 `);
 
 const getGithubUrlFromRequest = (requestUrl) => {
+  const encodePathSegment = (value) => {
+    try {
+      return encodeURIComponent(decodeURIComponent(value));
+    } catch {
+      return encodeURIComponent(value);
+    }
+  };
+
   const userMatch = requestUrl.pathname.match(/^\/api\/github\/users\/([^/]+)$/);
   if (userMatch) {
-    const username = encodeURIComponent(decodeURIComponent(userMatch[1]));
+    const username = encodePathSegment(userMatch[1]);
     return `https://api.github.com/users/${username}`;
   }
 
@@ -107,7 +115,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     /^\/api\/github\/users\/([^/]+)\/repos$/
   );
   if (reposMatch) {
-    const username = encodeURIComponent(decodeURIComponent(reposMatch[1]));
+    const username = encodePathSegment(reposMatch[1]);
     const searchParams = new URLSearchParams(requestUrl.searchParams);
 
     if (!searchParams.has("per_page")) {
@@ -117,6 +125,76 @@ const getGithubUrlFromRequest = (requestUrl) => {
     const queryString = searchParams.toString();
     const querySuffix = queryString ? `?${queryString}` : "";
     return `https://api.github.com/users/${username}/repos${querySuffix}`;
+  }
+
+  const repoMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)$/
+  );
+  if (repoMatch) {
+    const owner = encodePathSegment(repoMatch[1]);
+    const repo = encodePathSegment(repoMatch[2]);
+    return `https://api.github.com/repos/${owner}/${repo}`;
+  }
+
+  const repoLanguagesMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/languages$/
+  );
+  if (repoLanguagesMatch) {
+    const owner = encodePathSegment(repoLanguagesMatch[1]);
+    const repo = encodePathSegment(repoLanguagesMatch[2]);
+    return `https://api.github.com/repos/${owner}/${repo}/languages`;
+  }
+
+  const repoCommitsMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/commits$/
+  );
+  if (repoCommitsMatch) {
+    const owner = encodePathSegment(repoCommitsMatch[1]);
+    const repo = encodePathSegment(repoCommitsMatch[2]);
+    const searchParams = new URLSearchParams(requestUrl.searchParams);
+
+    if (!searchParams.has("per_page")) {
+      searchParams.set("per_page", "10");
+    }
+
+    const queryString = searchParams.toString();
+    const querySuffix = queryString ? `?${queryString}` : "";
+    return `https://api.github.com/repos/${owner}/${repo}/commits${querySuffix}`;
+  }
+
+  const repoContributorsMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/contributors$/
+  );
+  if (repoContributorsMatch) {
+    const owner = encodePathSegment(repoContributorsMatch[1]);
+    const repo = encodePathSegment(repoContributorsMatch[2]);
+    const searchParams = new URLSearchParams(requestUrl.searchParams);
+
+    if (!searchParams.has("per_page")) {
+      searchParams.set("per_page", "10");
+    }
+
+    const queryString = searchParams.toString();
+    const querySuffix = queryString ? `?${queryString}` : "";
+    return `https://api.github.com/repos/${owner}/${repo}/contributors${querySuffix}`;
+  }
+
+  const repoReadmeMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/
+  );
+  if (repoReadmeMatch) {
+    const owner = encodePathSegment(repoReadmeMatch[1]);
+    const repo = encodePathSegment(repoReadmeMatch[2]);
+    return `https://api.github.com/repos/${owner}/${repo}/readme`;
+  }
+
+  const repoLatestReleaseMatch = requestUrl.pathname.match(
+    /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/releases\/latest$/
+  );
+  if (repoLatestReleaseMatch) {
+    const owner = encodePathSegment(repoLatestReleaseMatch[1]);
+    const repo = encodePathSegment(repoLatestReleaseMatch[2]);
+    return `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
   }
 
   return null;

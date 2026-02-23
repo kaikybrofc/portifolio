@@ -18,9 +18,10 @@ const ProjectsSection = () => {
           "sort=updated&per_page=100"
         );
 
-        // Sort by stars and updated date, filter out forks, take top 6
-        const filteredRepos = data
-          .filter((repo) => !repo.fork)
+        const nonForkRepos = data.filter((repo) => !repo.fork);
+
+        // Sort by stars and updated date, take top 6.
+        const sortedRepos = nonForkRepos
           .sort((a, b) => {
             // Primary sort by stars
             if (b.stargazers_count !== a.stargazers_count) {
@@ -28,8 +29,19 @@ const ProjectsSection = () => {
             }
             // Secondary sort by updated date
             return new Date(b.updated_at) - new Date(a.updated_at);
-          })
-          .slice(0, 6);
+          });
+
+        let filteredRepos = sortedRepos.slice(0, 6);
+        const omnizapRepo = nonForkRepos.find(
+          (repo) => repo.name?.toLowerCase() === "omnizap-system"
+        );
+
+        if (
+          omnizapRepo &&
+          !filteredRepos.some((repo) => repo.id === omnizapRepo.id)
+        ) {
+          filteredRepos = [...filteredRepos.slice(0, 5), omnizapRepo];
+        }
 
         setRepos(filteredRepos);
       } catch (error) {

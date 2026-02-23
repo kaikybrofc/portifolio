@@ -14,6 +14,7 @@ const oauthRedirectTo =
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [githubToken, setGithubToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -25,19 +26,26 @@ export const AuthProvider = ({ children }) => {
 
     // Check active sessions and sets the user
     const getSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
       if (error) {
-        console.error("Error fetching session:", error);
+        console.error('Error fetching session:', error);
       }
       setCurrentUser(session?.user || null);
+      setGithubToken(session?.provider_token || null);
       setLoading(false);
     };
 
     getSession();
 
     // Listen for changes on auth state (log in, log out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setCurrentUser(session?.user || null);
+      setGithubToken(session?.provider_token || null);
       setLoading(false);
     });
 
@@ -47,11 +55,11 @@ export const AuthProvider = ({ children }) => {
   const login = async () => {
     if (!isSupabaseConfigured) {
       toast({
-        variant: "destructive",
-        title: "Supabase nao configurado",
+        variant: 'destructive',
+        title: 'Supabase nao configurado',
         description: hasSupabaseSecretInBrowser
-          ? "Chave secreta detectada no frontend. Use apenas anon/publishable key e gere novo build."
-          : "Defina VITE_SUPABASE_* (ou NEXT_PUBLIC_SUPABASE_*) e gere um novo build na VPS.",
+          ? 'Chave secreta detectada no frontend. Use apenas anon/publishable key e gere novo build.'
+          : 'Defina VITE_SUPABASE_* (ou NEXT_PUBLIC_SUPABASE_*) e gere um novo build na VPS.',
       });
       return;
     }
@@ -60,15 +68,15 @@ export const AuthProvider = ({ children }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          redirectTo: oauthRedirectTo || window.location.origin
-        }
+          redirectTo: oauthRedirectTo || window.location.origin,
+        },
       });
       if (error) throw error;
     } catch (error) {
       toast({
-        variant: "destructive",
-        title: "Erro no login",
-        description: error.message || "Ocorreu um problema ao conectar com o GitHub.",
+        variant: 'destructive',
+        title: 'Erro no login',
+        description: error.message || 'Ocorreu um problema ao conectar com o GitHub.',
       });
     }
   };
@@ -79,15 +87,16 @@ export const AuthProvider = ({ children }) => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      setGithubToken(null);
       toast({
-        title: "Logout realizado",
-        description: "Você saiu da sua conta com sucesso.",
+        title: 'Logout realizado',
+        description: 'Você saiu da sua conta com sucesso.',
       });
     } catch (error) {
       toast({
-        variant: "destructive",
-        title: "Erro no logout",
-        description: error.message || "Ocorreu um problema ao sair.",
+        variant: 'destructive',
+        title: 'Erro no logout',
+        description: error.message || 'Ocorreu um problema ao sair.',
       });
     }
   };
@@ -96,7 +105,9 @@ export const AuthProvider = ({ children }) => {
   const isOwner = currentUser?.user_metadata?.user_name === 'kaikybrofc';
 
   return (
-    <AuthContext.Provider value={{ currentUser, loading, login, logout, isOwner }}>
+    <AuthContext.Provider
+      value={{ currentUser, githubToken, loading, login, logout, isOwner }}
+    >
       {children}
     </AuthContext.Provider>
   );

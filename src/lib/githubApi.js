@@ -129,10 +129,27 @@ const isJsonResponse = (response) => {
   return contentType.includes("application/json");
 };
 
-const fetchJson = async (url) => {
+const buildGitHubHeaders = (
+  token,
+  acceptHeader = "application/vnd.github+json"
+) => {
+  const headers = {
+    Accept: acceptHeader,
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+};
+
+const fetchJson = async (url, options = {}) => {
+  const { headers: extraHeaders = {} } = options;
   const response = await fetch(url, {
     headers: {
       Accept: "application/json",
+      ...extraHeaders,
     },
   });
 
@@ -148,11 +165,33 @@ const fetchJson = async (url) => {
   return response.json();
 };
 
-const fetchWithFallback = async (apiUrl, fallbackUrl) => {
+const fetchWithFallback = async (apiUrl, fallbackUrl, options = {}) => {
+  const { token, fallbackAcceptHeader, preferDirect = false } = options;
+  const fallbackHeaders = buildGitHubHeaders(token, fallbackAcceptHeader);
+  const canUseDirectFallback =
+    ALLOW_DIRECT_GITHUB_FALLBACK ||
+    Boolean(typeof token === "string" && token.trim());
+
+  if (preferDirect && canUseDirectFallback) {
+    try {
+      return await fetchJson(fallbackUrl, {
+        headers: fallbackHeaders,
+      });
+    } catch (directError) {
+      warnOnce(
+        `github-api-direct-prefer-failed-${fallbackUrl}`,
+        `[githubApi] Direct GitHub preferred fetch failed for ${fallbackUrl}. Trying API cache.`,
+        directError
+      );
+    }
+  }
+
   if (!apiUrl) {
-    if (ALLOW_DIRECT_GITHUB_FALLBACK) {
+    if (canUseDirectFallback) {
       try {
-        return await fetchJson(fallbackUrl);
+        return await fetchJson(fallbackUrl, {
+          headers: fallbackHeaders,
+        });
       } catch (fallbackError) {
         warnOnce(
           "github-api-fallback-failed-without-api",
@@ -173,7 +212,7 @@ const fetchWithFallback = async (apiUrl, fallbackUrl) => {
   try {
     return await fetchJson(apiUrl);
   } catch (apiError) {
-    if (!ALLOW_DIRECT_GITHUB_FALLBACK) {
+    if (!canUseDirectFallback) {
       warnOnce(
         `github-api-disabled-${apiUrl}`,
         `[githubApi] API cache unavailable for ${apiUrl}. Direct GitHub fallback disabled. Returning local fallback data.`,
@@ -188,7 +227,9 @@ const fetchWithFallback = async (apiUrl, fallbackUrl) => {
       apiError
     );
     try {
-      return await fetchJson(fallbackUrl);
+      return await fetchJson(fallbackUrl, {
+        headers: fallbackHeaders,
+      });
     } catch (fallbackError) {
       warnOnce(
         `github-api-fallback-failed-${apiUrl}`,
@@ -227,4 +268,106 @@ export const fetchGitHubRepos = async (
   const fallbackUrl = `https://api.github.com/users/${encodedUsername}/repos${query}`;
   const data = await fetchWithFallback(apiUrl, fallbackUrl);
   return Array.isArray(data) ? data : [];
+};
+
+const buildRepoEndpoint = (owner, repo, resourcePath = "", queryString = "") => {
+  const encodedOwner = encodeURIComponent(owner);
+  const encodedRepo = encodeURIComponent(repo);
+  const safeResourcePath = resourcePath.startsWith("/")
+    ? resourcePath
+    : resourcePath
+      ? `/${resourcePath}`
+      : "";
+  const query = queryString ? `?${queryString}` : "";
+
+  return {
+    apiUrl: buildApiUrl(
+      `/api/github/repos/${encodedOwner}/${encodedRepo}${safeResourcePath}${query}`
+    ),
+    fallbackUrl: `https://api.github.com/repos/${encodedOwner}/${encodedRepo}${safeResourcePath}${query}`,
+  };
+};
+
+const getDefaultGitHubRepo = (owner, repo) => ({
+  id: `${owner}/${repo}`,
+  name: repo,
+  full_name: `${owner}/${repo}`,
+  html_url: `https://github.com/${owner}/${repo}`,
+  description: "Repositorio sem descricao publica.",
+  stargazers_count: 0,
+  forks_count: 0,
+  open_issues_count: 0,
+  subscribers_count: 0,
+  watchers_count: 0,
+  default_branch: "main",
+  pushed_at: null,
+  updated_at: null,
+  created_at: null,
+  homepage: "",
+  language: null,
+  topics: [],
+  visibility: "public",
+  license: null,
+});
+
+export const fetchGitHubRepo = async (owner, repo, options = {}) => {
+  const endpoint = buildRepoEndpoint(owner, repo);
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  return data || getDefaultGitHubRepo(owner, repo);
+};
+
+export const fetchGitHubRepoLanguages = async (owner, repo, options = {}) => {
+  const endpoint = buildRepoEndpoint(owner, repo, "/languages");
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+};
+
+export const fetchGitHubRepoCommits = async (
+  owner,
+  repo,
+  queryString = "per_page=10",
+  options = {}
+) => {
+  const endpoint = buildRepoEndpoint(owner, repo, "/commits", queryString);
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  return Array.isArray(data) ? data : [];
+};
+
+export const fetchGitHubRepoContributors = async (
+  owner,
+  repo,
+  queryString = "per_page=10",
+  options = {}
+) => {
+  const endpoint = buildRepoEndpoint(owner, repo, "/contributors", queryString);
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  return Array.isArray(data) ? data : [];
+};
+
+export const fetchGitHubLatestRelease = async (owner, repo, options = {}) => {
+  const endpoint = buildRepoEndpoint(owner, repo, "/releases/latest");
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  if (data.message === "Not Found") {
+    return null;
+  }
+
+  return data;
+};
+
+export const fetchGitHubRepoReadme = async (owner, repo, options = {}) => {
+  const endpoint = buildRepoEndpoint(owner, repo, "/readme");
+  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  if (data.message === "Not Found") {
+    return null;
+  }
+
+  return data;
 };

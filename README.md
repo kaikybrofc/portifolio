@@ -46,6 +46,12 @@ Para reduzir chamadas diretas no GitHub e evitar rate limit, os dados de:
 
 - `/users/:username`
 - `/users/:username/repos`
+- `/repos/:owner/:repo`
+- `/repos/:owner/:repo/languages`
+- `/repos/:owner/:repo/commits`
+- `/repos/:owner/:repo/contributors`
+- `/repos/:owner/:repo/readme`
+- `/repos/:owner/:repo/releases/latest`
 
 sao cacheados em SQLite (`data/github-cache.sqlite`).
 
@@ -100,6 +106,7 @@ Endpoints:
 Dashboard:
 
 - `/analytics` (rota protegida: visivel apenas para o owner autenticado)
+- `/projetos/omnizap-system` (pagina dedicada com detalhes avancados do projeto OmniZap System)
 
 ## Anti-spam em formularios
 
