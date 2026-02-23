@@ -54,6 +54,8 @@ Variaveis opcionais:
 - `GITHUB_CACHE_TTL_MS` (padrao `900000`, 15 min)
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
+- `VITE_SUPABASE_URL` (obrigatoria para login GitHub via Supabase)
+- `VITE_SUPABASE_ANON_KEY` (obrigatoria para login GitHub via Supabase)
 - `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
 - `VITE_USE_RELATIVE_API` (padrao: `true`)
 - `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`; em producao publica fica desabilitado para evitar CSP)
@@ -73,6 +75,11 @@ Sem uma dessas opcoes, os dados do GitHub nao serao carregados em producao.
 Importante: nao use `VITE_API_BASE_URL=http://localhost:8787` em build de producao.
 `localhost` so funciona na sua maquina e sera bloqueado em navegadores dos visitantes.
 Use esse valor apenas em `.env.development`.
+
+Para OAuth com Supabase em producao (VPS), configure `VITE_SUPABASE_URL` e
+`VITE_SUPABASE_ANON_KEY` (ou `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+antes de rodar `npm run build`. Em projetos Vite, variaveis publicas sao injetadas no build,
+entao alterar o `.env` apos o build nao atualiza o `dist/`.
 
 ## Visitas da pagina (SQLite)
 

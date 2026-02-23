@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 
 const AuthContext = createContext(undefined);
@@ -10,6 +10,11 @@ export const AuthProvider = ({ children }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     // Check active sessions and sets the user
     const getSession = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
@@ -32,6 +37,15 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async () => {
+    if (!isSupabaseConfigured) {
+      toast({
+        variant: "destructive",
+        title: "Supabase nao configurado",
+        description: "Defina VITE_SUPABASE_* (ou NEXT_PUBLIC_SUPABASE_*) e gere um novo build na VPS.",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
@@ -50,6 +64,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    if (!isSupabaseConfigured) return;
+
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
