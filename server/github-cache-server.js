@@ -35,6 +35,7 @@ const normalizeWebhookPath = (value) => {
 const OMNIZAP_WEBHOOK_PATH = normalizeWebhookPath(
   process.env.OMNIZAP_WEBHOOK_PATH || "/api/webhooks/omnizap-ingest"
 );
+const OMNIZAP_WEBHOOK_ALIAS_PATH = "/api/omnizap/webhook/ingest";
 const OMNIZAP_WEBHOOK_TOKEN = process.env.OMNIZAP_WEBHOOK_TOKEN || "";
 const OMNIZAP_WEBHOOK_MAX_BODY_BYTES = Number(
   process.env.OMNIZAP_WEBHOOK_MAX_BODY_BYTES || 1024 * 1024
@@ -287,7 +288,10 @@ const readJsonBody = async (request, options = {}) => {
   }
 };
 
-const getWebhookTokenFromRequest = (request) => {
+const isOmnizapWebhookIngestPath = (pathname) =>
+  pathname === OMNIZAP_WEBHOOK_PATH || pathname === OMNIZAP_WEBHOOK_ALIAS_PATH;
+
+const getWebhookTokenFromRequest = (request, requestUrl, payload) => {
   const authorizationHeader = request.headers.authorization;
   if (
     typeof authorizationHeader === "string" &&
@@ -299,6 +303,24 @@ const getWebhookTokenFromRequest = (request) => {
   const webhookTokenHeader = request.headers["x-webhook-token"];
   if (typeof webhookTokenHeader === "string") {
     return webhookTokenHeader.trim();
+  }
+
+  const queryToken =
+    requestUrl.searchParams.get("token") ||
+    requestUrl.searchParams.get("webhook_token");
+  if (typeof queryToken === "string" && queryToken.trim()) {
+    return queryToken.trim();
+  }
+
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const bodyToken =
+      (typeof payload.webhook_token === "string" && payload.webhook_token) ||
+      (typeof payload.token === "string" && payload.token) ||
+      "";
+
+    if (bodyToken.trim()) {
+      return bodyToken.trim();
+    }
   }
 
   return "";
@@ -330,6 +352,18 @@ const parseWebhookSource = (request, payload) => {
   }
 
   return "omnizap-local";
+};
+
+const sanitizeWebhookPayload = (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+
+  const sanitizedPayload = { ...payload };
+  delete sanitizedPayload.token;
+  delete sanitizedPayload.webhook_token;
+
+  return sanitizedPayload;
 };
 
 const getClientIp = (request) => {
@@ -477,19 +511,11 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === OMNIZAP_WEBHOOK_PATH) {
+  if (request.method === "POST" && isOmnizapWebhookIngestPath(requestUrl.pathname)) {
     if (!OMNIZAP_WEBHOOK_TOKEN) {
       sendJson(response, 503, {
         error: "Webhook indisponivel. OMNIZAP_WEBHOOK_TOKEN nao configurado.",
       });
-      return;
-    }
-
-    const providedToken = getWebhookTokenFromRequest(request);
-    const isAuthorized = secureCompareToken(providedToken, OMNIZAP_WEBHOOK_TOKEN);
-
-    if (!isAuthorized) {
-      sendJson(response, 401, { error: "Token de webhook invalido." });
       return;
     }
 
@@ -509,9 +535,18 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const providedToken = getWebhookTokenFromRequest(request, requestUrl, body);
+    const isAuthorized = secureCompareToken(providedToken, OMNIZAP_WEBHOOK_TOKEN);
+
+    if (!isAuthorized) {
+      sendJson(response, 401, { error: "Token de webhook invalido." });
+      return;
+    }
+
     const receivedAt = Date.now();
-    const source = parseWebhookSource(request, body);
-    const payloadAsJson = JSON.stringify(body);
+    const sanitizedBody = sanitizeWebhookPayload(body);
+    const source = parseWebhookSource(request, sanitizedBody);
+    const payloadAsJson = JSON.stringify(sanitizedBody);
 
     const result = insertOmnizapWebhookEventStmt.run(
       source,
@@ -577,6 +612,8 @@ const server = createServer(async (request, response) => {
       cache_ttl_ms: CACHE_TTL_MS,
       db_path: DB_PATH,
       omnizap_webhook_enabled: Boolean(OMNIZAP_WEBHOOK_TOKEN),
+      omnizap_webhook_path: OMNIZAP_WEBHOOK_PATH,
+      omnizap_webhook_alias_path: OMNIZAP_WEBHOOK_ALIAS_PATH,
     });
     return;
   }
@@ -649,6 +686,9 @@ server.listen(PORT, () => {
   console.log(`[github-cache] GitHub token ${GITHUB_TOKEN ? "enabled" : "disabled"}`);
   console.log(
     `[github-cache] OmniZap webhook ${OMNIZAP_WEBHOOK_TOKEN ? "enabled" : "disabled"}`
+  );
+  console.log(
+    `[github-cache] OmniZap ingest path ${OMNIZAP_WEBHOOK_PATH} (alias ${OMNIZAP_WEBHOOK_ALIAS_PATH})`
   );
 });
 

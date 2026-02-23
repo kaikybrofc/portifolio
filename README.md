@@ -117,12 +117,14 @@ Dashboard:
 Para enviar dados do seu OmniZap local para o portfolio hospedado, use:
 
 - `POST OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao, protegida por token)
+- Alias fixo aceito: `POST /api/omnizap/webhook/ingest`
 - `GET /api/omnizap/webhook/latest` (ultimo payload recebido, usado pela pagina `/projetos/omnizap-system`)
 
 Headers aceitos para autenticacao no POST:
 
 - `Authorization: Bearer <OMNIZAP_WEBHOOK_TOKEN>`
 - ou `x-webhook-token: <OMNIZAP_WEBHOOK_TOKEN>`
+- ou query/body: `token` / `webhook_token`
 
 Exemplo com `curl`:
 
@@ -152,6 +154,11 @@ npm run webhook:omnizap:push
 
 Importante: execute esse comando na maquina que consegue acessar o OmniZap (`OMNIZAP_LOCAL_BASE_URL`).
 Se rodar na VPS sem o OmniZap disponivel nela, as rotas locais vao falhar.
+
+Fluxo recomendado para producao:
+
+- O `omnizap-system` (em qualquer maquina) envia `POST` direto para `https://seu-dominio.com/api/webhooks/omnizap-ingest`
+- O site salva o ultimo payload recebido e a pagina `/projetos/omnizap-system` atualiza automaticamente (polling)
 
 ## Anti-spam em formularios
 

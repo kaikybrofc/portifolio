@@ -32,6 +32,7 @@ import { fetchOmnizapWebhookLatest } from '@/lib/omnizapWebhookApi';
 
 const PROJECT_OWNER = 'kaikybrofc';
 const PROJECT_NAME = 'omnizap-system';
+const WEBHOOK_POLL_INTERVAL_MS = 30_000;
 
 const numberFormatter = new Intl.NumberFormat('pt-BR');
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -128,6 +129,7 @@ const getWebhookRoutesPayload = (payload) => {
 
 const extractRouteItemCount = (value) => {
   if (value == null) return null;
+  if (typeof value === 'number') return Number(value);
   if (Array.isArray(value)) return value.length;
   if (typeof value !== 'object') return null;
 
@@ -206,7 +208,7 @@ const OmniZapSystemPage = () => {
         typeof key === 'string' &&
         key.trim().length > 0 &&
         value != null &&
-        (Array.isArray(value) || typeof value === 'object')
+        (Array.isArray(value) || typeof value === 'object' || typeof value === 'number')
     );
 
     const findByKeys = (keywords) => {
@@ -311,6 +313,22 @@ const OmniZapSystemPage = () => {
   useEffect(() => {
     loadProjectData(false);
   }, [loadProjectData]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      fetchOmnizapWebhookLatest()
+        .then((webhookData) => {
+          setWebhookSnapshot(webhookData);
+        })
+        .catch((webhookError) => {
+          console.warn('Nao foi possivel atualizar o webhook OmniZap.', webhookError);
+        });
+    }, WEBHOOK_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const statusLabel = hasToken
     ? 'Dados carregados pela API com suporte ao token da sessao.'
