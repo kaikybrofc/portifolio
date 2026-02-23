@@ -14,6 +14,10 @@ const WS_TOKEN = process.env.OMNIZAP_WS_TOKEN || process.env.OMNIZAP_WEBHOOK_TOK
 const CLIENT_ID = process.env.OMNIZAP_CLIENT_ID || `${os.hostname()}-${process.pid}`;
 const FETCH_LIMIT = Number(process.env.OMNIZAP_STICKER_LIMIT || 100);
 const SYNC_INTERVAL_MS = Number(process.env.OMNIZAP_WS_SYNC_INTERVAL_MS || 60_000);
+const MEDIA_PROXY_PATH = process.env.OMNIZAP_MEDIA_PROXY_PATH || "/api/omnizap/media";
+const WS_MEDIA_MAX_BYTES = Number(
+  process.env.OMNIZAP_WS_MEDIA_MAX_BYTES || 512 * 1024
+);
 const HEARTBEAT_INTERVAL_MS = Number(
   process.env.OMNIZAP_WS_HEARTBEAT_INTERVAL_MS || 25_000
 );
@@ -33,6 +37,104 @@ const normalizeBaseUrl = (value) =>
   value && value.endsWith("/") ? value.slice(0, -1) : value;
 
 const localBaseUrl = normalizeBaseUrl(LOCAL_BASE_URL);
+
+const normalizeRelativePath = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!trimmed || trimmed.length > 1024) {
+    return "";
+  }
+
+  const segments = trimmed.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return "";
+  }
+
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") {
+      return "";
+    }
+  }
+
+  return segments.join("/");
+};
+
+const normalizeResourceUrl = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return "";
+  }
+
+  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized, "http://localhost");
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    for (const segment of segments) {
+      if (segment === "." || segment === "..") {
+        return "";
+      }
+    }
+
+    return `${parsed.pathname}${parsed.search || ""}`;
+  } catch {
+    return "";
+  }
+};
+
+const encodePathSegments = (value) =>
+  value
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+const buildLocalDataUrl = (relativePath) => {
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+  if (!normalizedRelativePath) {
+    return "";
+  }
+
+  const encodedPath = encodePathSegments(normalizedRelativePath);
+  return `${localBaseUrl}/data/${encodedPath}`;
+};
+
+const buildLocalResourceUrl = (resourceUrl) => {
+  const normalizedResourceUrl = normalizeResourceUrl(resourceUrl);
+  if (!normalizedResourceUrl) {
+    return "";
+  }
+
+  return `${localBaseUrl}${normalizedResourceUrl}`;
+};
+
+const buildMediaProxyUrl = ({ relativePath = "", resourceUrl = "" }) => {
+  const query = new URLSearchParams();
+  query.set("client_id", CLIENT_ID);
+
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+  const normalizedResourceUrl = normalizeResourceUrl(resourceUrl);
+  if (normalizedRelativePath) {
+    query.set("relative_path", normalizedRelativePath);
+  } else if (normalizedResourceUrl) {
+    query.set("resource_url", normalizedResourceUrl);
+  } else {
+    return "";
+  }
+
+  return `${MEDIA_PROXY_PATH}?${query.toString()}`;
+};
 
 const endpoints = [
   {
@@ -75,6 +177,51 @@ const fetchJson = async (url) => {
   return response.json();
 };
 
+const decorateRoutePayload = (endpointPath, payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
+  }
+
+  const clonedPayload = { ...payload };
+
+  if (endpointPath.startsWith("/api/sticker-packs/data-files")) {
+    const originalItems = Array.isArray(payload.data) ? payload.data : [];
+    clonedPayload.data = originalItems.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return item;
+      }
+
+      const relativePath =
+        typeof item.relative_path === "string" ? item.relative_path : "";
+      const proxyImageUrl = buildMediaProxyUrl({ relativePath });
+      return {
+        ...item,
+        proxy_image_url: proxyImageUrl || undefined,
+        client_id: CLIENT_ID,
+      };
+    });
+  }
+
+  if (endpointPath.startsWith("/api/sticker-packs?")) {
+    const originalPacks = Array.isArray(payload.data) ? payload.data : [];
+    clonedPayload.data = originalPacks.map((pack) => {
+      if (!pack || typeof pack !== "object" || Array.isArray(pack)) {
+        return pack;
+      }
+
+      const coverUrl = typeof pack.cover_url === "string" ? pack.cover_url : "";
+      const proxyCoverUrl = buildMediaProxyUrl({ resourceUrl: coverUrl });
+      return {
+        ...pack,
+        proxy_cover_url: proxyCoverUrl || undefined,
+        client_id: CLIENT_ID,
+      };
+    });
+  }
+
+  return clonedPayload;
+};
+
 const collectLocalRoutes = async () => {
   const routeData = {};
 
@@ -82,7 +229,7 @@ const collectLocalRoutes = async () => {
     const url = `${localBaseUrl}${endpoint.path}`;
     try {
       const data = await fetchJson(url);
-      routeData[endpoint.key] = data;
+      routeData[endpoint.key] = decorateRoutePayload(endpoint.path, data);
       console.log(`[omnizap-bridge] OK ${endpoint.path}`);
     } catch (error) {
       routeData[endpoint.key] = {
@@ -161,6 +308,101 @@ const scheduleReconnect = () => {
   }, waitTimeMs);
 };
 
+const fetchBinary = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Falha em ${url} (${response.status})`);
+  }
+
+  const contentType =
+    (response.headers.get("content-type") || "application/octet-stream")
+      .split(";")[0]
+      .trim() || "application/octet-stream";
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  return {
+    contentType,
+    buffer,
+  };
+};
+
+const sendMediaResponse = async (event) => {
+  const requestId =
+    (typeof event?.request_id === "string" && event.request_id.trim()) || "";
+  if (!requestId) {
+    return;
+  }
+
+  const relativePath = normalizeRelativePath(event.relative_path);
+  const resourceUrl = normalizeResourceUrl(event.resource_url);
+  const maxBytesFromServer = Number(event.max_bytes || 0);
+  const maxBytes =
+    Number.isFinite(maxBytesFromServer) && maxBytesFromServer > 0
+      ? Math.min(maxBytesFromServer, WS_MEDIA_MAX_BYTES)
+      : WS_MEDIA_MAX_BYTES;
+
+  if (!relativePath && !resourceUrl) {
+    sendJson({
+      type: "media_response",
+      request_id: requestId,
+      payload: {
+        ok: false,
+        error: "relative_path ou resource_url obrigatorio.",
+      },
+    });
+    return;
+  }
+
+  const fetchUrl = relativePath
+    ? buildLocalDataUrl(relativePath)
+    : buildLocalResourceUrl(resourceUrl);
+  if (!fetchUrl) {
+    sendJson({
+      type: "media_response",
+      request_id: requestId,
+      payload: {
+        ok: false,
+        error: "URL local invalida para obter midia.",
+      },
+    });
+    return;
+  }
+
+  try {
+    const media = await fetchBinary(fetchUrl);
+    if (media.buffer.length === 0) {
+      throw new Error("Arquivo vazio.");
+    }
+
+    if (media.buffer.length > maxBytes) {
+      throw new Error(
+        `Arquivo excede limite (${media.buffer.length} bytes > ${maxBytes} bytes).`
+      );
+    }
+
+    sendJson({
+      type: "media_response",
+      request_id: requestId,
+      payload: {
+        ok: true,
+        content_type: media.contentType,
+        size_bytes: media.buffer.length,
+        data_base64: media.buffer.toString("base64"),
+      },
+    });
+  } catch (error) {
+    sendJson({
+      type: "media_response",
+      request_id: requestId,
+      payload: {
+        ok: false,
+        error: String(error?.message || error),
+      },
+    });
+  }
+};
+
 const handleServerEvent = async (message) => {
   const deliveryId = Number(message?.delivery_id || 0);
   const event = message?.event;
@@ -177,6 +419,11 @@ const handleServerEvent = async (message) => {
   if (eventType === "request_sync") {
     console.log("[omnizap-bridge] Comando request_sync recebido.");
     await pushRouteSnapshot("server-command");
+    return;
+  }
+
+  if (eventType === "fetch_media") {
+    await sendMediaResponse(event);
     return;
   }
 

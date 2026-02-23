@@ -29,6 +29,7 @@ import {
   fetchGitHubRepoReadme,
 } from '@/lib/githubApi';
 import {
+  buildOmnizapMediaProxyUrl,
   fetchOmnizapWebhookLatest,
   fetchOmnizapWsStatus,
 } from '@/lib/omnizapWebhookApi';
@@ -162,6 +163,19 @@ const extractRouteItemCount = (value) => {
   return null;
 };
 
+const findRouteValueByKeywords = (routesPayload, keywords) => {
+  const entries = Object.entries(routesPayload || {});
+  const match = entries.find(([routeKey]) => {
+    const normalized = routeKey.toLowerCase();
+    return keywords.every((keyword) => normalized.includes(keyword));
+  });
+
+  return match ? match[1] : null;
+};
+
+const toSafeText = (value, fallback = '-') =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
 const OmniZapSystemPage = () => {
   const { githubToken } = useAuth();
   const { toast } = useToast();
@@ -254,6 +268,86 @@ const OmniZapSystemPage = () => {
         : [],
     };
   }, [wsStatus]);
+
+  const remoteMediaCatalog = useMemo(() => {
+    if (!webhookSnapshot?.payload) {
+      return {
+        clientId: '',
+        dataFiles: [],
+        stickerPacks: [],
+      };
+    }
+
+    const payload = webhookSnapshot.payload;
+    const routesPayload = getWebhookRoutesPayload(payload);
+    const clientId = toSafeText(payload.client_id, '');
+    const dataFilesRoute = findRouteValueByKeywords(routesPayload, ['data-files']);
+    const stickerPacksRoute = findRouteValueByKeywords(routesPayload, [
+      'sticker-packs',
+      'visibility',
+    ]);
+
+    const dataFiles = Array.isArray(dataFilesRoute?.data) ? dataFilesRoute.data : [];
+    const stickerPacks = Array.isArray(stickerPacksRoute?.data)
+      ? stickerPacksRoute.data
+      : [];
+
+    const mappedDataFiles = dataFiles
+      .map((fileItem) => {
+        if (!fileItem || typeof fileItem !== 'object' || Array.isArray(fileItem)) {
+          return null;
+        }
+
+        const relativePath = toSafeText(fileItem.relative_path, '');
+        const proxyImageUrl =
+          toSafeText(fileItem.proxy_image_url, '') ||
+          buildOmnizapMediaProxyUrl({
+            clientId,
+            relativePath,
+          });
+
+        return {
+          name: toSafeText(fileItem.name, 'sticker.webp'),
+          relativePath,
+          updatedAt: toSafeText(fileItem.updated_at, ''),
+          sizeBytes: Number(fileItem.size_bytes || 0),
+          proxyImageUrl,
+        };
+      })
+      .filter((fileItem) => fileItem && fileItem.proxyImageUrl)
+      .slice(0, 12);
+
+    const mappedPacks = stickerPacks
+      .map((packItem) => {
+        if (!packItem || typeof packItem !== 'object' || Array.isArray(packItem)) {
+          return null;
+        }
+
+        const coverResourceUrl = toSafeText(packItem.cover_url, '');
+        const proxyCoverUrl =
+          toSafeText(packItem.proxy_cover_url, '') ||
+          buildOmnizapMediaProxyUrl({
+            clientId,
+            resourceUrl: coverResourceUrl,
+          });
+
+        return {
+          packKey: toSafeText(packItem.pack_key, ''),
+          name: toSafeText(packItem.name, 'Sem nome'),
+          publisher: toSafeText(packItem.publisher, 'Desconhecido'),
+          stickerCount: Number(packItem.sticker_count || 0),
+          proxyCoverUrl,
+        };
+      })
+      .filter((packItem) => packItem && packItem.proxyCoverUrl)
+      .slice(0, 6);
+
+    return {
+      clientId,
+      dataFiles: mappedDataFiles,
+      stickerPacks: mappedPacks,
+    };
+  }, [webhookSnapshot]);
 
   const loadProjectData = useCallback(
     async (isManualRefresh = false) => {
@@ -795,6 +889,87 @@ const OmniZapSystemPage = () => {
                 )}
               </NeonBox>
             </div>
+
+            <NeonBox color="accent" className="p-6 bg-gray-900/80" hover={false}>
+              <h3 className="text-xl font-bold text-white mb-4">
+                Stickers remotos (via WS)
+              </h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Cliente alvo: <span className="text-cyan-300">{remoteMediaCatalog.clientId || '-'}</span>
+              </p>
+
+              {remoteMediaCatalog.dataFiles.length === 0 &&
+              remoteMediaCatalog.stickerPacks.length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  Nenhuma midia remota disponivel no ultimo snapshot.
+                </p>
+              ) : (
+                <div className="space-y-6">
+                  {remoteMediaCatalog.stickerPacks.length > 0 && (
+                    <div>
+                      <p className="text-sm text-cyan-300 mb-3">Covers dos packs</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {remoteMediaCatalog.stickerPacks.map((packItem) => (
+                          <div
+                            key={packItem.packKey || packItem.name}
+                            className="rounded-lg border border-cyan-400/25 bg-gray-800/60 p-2"
+                          >
+                            <div className="aspect-square rounded-md overflow-hidden bg-gray-900 mb-2">
+                              <img
+                                src={packItem.proxyCoverUrl}
+                                alt={packItem.name}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <p className="text-xs text-white truncate">{packItem.name}</p>
+                            <p className="text-[11px] text-gray-400 truncate">
+                              {packItem.publisher}
+                            </p>
+                            <p className="text-[11px] text-cyan-300">
+                              {formatCount(packItem.stickerCount)} stickers
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {remoteMediaCatalog.dataFiles.length > 0 && (
+                    <div>
+                      <p className="text-sm text-cyan-300 mb-3">Arquivos em /data</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {remoteMediaCatalog.dataFiles.map((fileItem) => (
+                          <a
+                            key={fileItem.relativePath || fileItem.name}
+                            href={fileItem.proxyImageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg border border-cyan-400/25 bg-gray-800/60 p-2 hover:border-cyan-400/50 transition-colors"
+                          >
+                            <div className="aspect-square rounded-md overflow-hidden bg-gray-900 mb-2">
+                              <img
+                                src={fileItem.proxyImageUrl}
+                                alt={fileItem.name}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <p className="text-[11px] text-gray-300 truncate">{fileItem.name}</p>
+                            <p className="text-[11px] text-gray-500">
+                              {(fileItem.sizeBytes / 1024).toFixed(1)} KB
+                            </p>
+                            <p className="text-[11px] text-gray-500 truncate">
+                              {formatDate(fileItem.updatedAt)}
+                            </p>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </NeonBox>
 
             <NeonBox color="magenta" className="p-6 bg-gray-900/80" hover={false}>
               <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">

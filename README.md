@@ -83,11 +83,16 @@ Variaveis opcionais:
 - `OMNIZAP_DEFAULT_TARGET_CLIENT` (cliente alvo padrao na fila; padrao `default`)
 - `OMNIZAP_WS_HEARTBEAT_MS` (heartbeat backend WS; padrao `30000`)
 - `OMNIZAP_WS_MAX_MESSAGE_BYTES` (limite de payload WS; padrao `1048576`)
+- `OMNIZAP_MEDIA_PROXY_PATH` (rota para servir stickers remotos via WS; padrao `/api/omnizap/media`)
+- `OMNIZAP_MEDIA_REQUEST_TIMEOUT_MS` (timeout para buscar midia no cliente; padrao `15000`)
+- `OMNIZAP_MEDIA_CACHE_TTL_MS` (cache de midia no backend; padrao `600000`)
+- `OMNIZAP_MEDIA_MAX_BYTES` (limite de arquivo de midia; padrao `524288`)
 - `OMNIZAP_WS_URL` (URL `ws://`/`wss://` usada pelo bridge local)
 - `OMNIZAP_CLIENT_ID` (id fixo do cliente local; recomendado em producao)
 - `OMNIZAP_WS_SYNC_INTERVAL_MS` (sync periodico do bridge; padrao `60000`)
 - `OMNIZAP_WS_HEARTBEAT_INTERVAL_MS` (heartbeat do bridge; padrao `25000`)
 - `OMNIZAP_WS_RECONNECT_MAX_MS` (backoff maximo do bridge; padrao `30000`)
+- `OMNIZAP_WS_MEDIA_MAX_BYTES` (limite de envio de midia no bridge; padrao `524288`)
 
 ## Deploy estatico e CSP
 
@@ -141,6 +146,7 @@ Endpoints:
 - `POST OMNIZAP_COMMANDS_PATH` (enfileira comando para cliente local)
 - `GET OMNIZAP_WS_PATH` (health rapido do canal WS; resposta `status: "ready"`)
 - `GET /api/omnizap/ws/status` (status de conexoes e fila pendente)
+- `GET OMNIZAP_MEDIA_PROXY_PATH?client_id=...&relative_path=...` (serve arquivo remoto via cliente WS)
 - `GET /api/health` (health geral, inclui metrica do canal OmniZap)
 
 Tokens aceitos no HTTP:
@@ -182,6 +188,18 @@ npm run webhook:omnizap:push
 ```
 
 Importante: os comandos `webhook:omnizap:push` e `omnizap:bridge` devem rodar na maquina que tem acesso ao OmniZap local. Nao precisam rodar na VPS.
+
+Render de sticker remoto no frontend:
+
+```text
+/api/omnizap/media?client_id=omnizap-local-1&relative_path=stickers/pack-x/arquivo.webp
+```
+
+Ou para recurso de endpoint local (ex.: `cover_url`):
+
+```text
+/api/omnizap/media?client_id=omnizap-local-1&resource_url=/api/sticker-packs/pack-key/stickers/id.webp
+```
 
 ## Anti-spam em formularios
 

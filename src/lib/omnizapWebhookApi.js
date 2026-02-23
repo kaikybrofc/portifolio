@@ -72,6 +72,11 @@ const WS_STATUS_ENDPOINT = API_BASE_URL
   : USE_RELATIVE_API
     ? "/api/omnizap/ws/status"
     : null;
+const MEDIA_PROXY_ENDPOINT = API_BASE_URL
+  ? `${API_BASE_URL}/api/omnizap/media`
+  : USE_RELATIVE_API
+    ? "/api/omnizap/media"
+    : null;
 
 export const fetchOmnizapWebhookLatest = async () => {
   if (!WEBHOOK_LATEST_ENDPOINT) {
@@ -159,4 +164,29 @@ export const fetchOmnizapWsStatus = async () => {
           .filter((entry) => entry.pending > 0)
       : [],
   };
+};
+
+export const buildOmnizapMediaProxyUrl = ({
+  clientId = "",
+  relativePath = "",
+  resourceUrl = "",
+}) => {
+  if (!MEDIA_PROXY_ENDPOINT) {
+    return "";
+  }
+
+  const query = new URLSearchParams();
+  if (typeof clientId === "string" && clientId.trim()) {
+    query.set("client_id", clientId.trim());
+  }
+
+  if (typeof relativePath === "string" && relativePath.trim()) {
+    query.set("relative_path", relativePath.trim());
+  } else if (typeof resourceUrl === "string" && resourceUrl.trim()) {
+    query.set("resource_url", resourceUrl.trim());
+  } else {
+    return "";
+  }
+
+  return `${MEDIA_PROXY_ENDPOINT}?${query.toString()}`;
 };

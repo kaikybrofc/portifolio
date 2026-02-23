@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer } from "ws";
 
@@ -60,6 +60,9 @@ const OMNIZAP_WEBHOOK_MAX_BODY_BYTES = Number(
 const OMNIZAP_WS_PATH = normalizeWebhookPath(
   process.env.OMNIZAP_WS_PATH || "/api/omnizap/ws"
 );
+const OMNIZAP_MEDIA_PROXY_PATH = normalizeWebhookPath(
+  process.env.OMNIZAP_MEDIA_PROXY_PATH || "/api/omnizap/media"
+);
 const OMNIZAP_COMMANDS_PATH = normalizeWebhookPath(
   process.env.OMNIZAP_COMMANDS_PATH || "/api/omnizap/commands"
 );
@@ -70,6 +73,15 @@ const OMNIZAP_WS_MAX_MESSAGE_BYTES = Number(
 );
 const OMNIZAP_WS_HEARTBEAT_MS = Number(
   process.env.OMNIZAP_WS_HEARTBEAT_MS || 30 * 1000
+);
+const OMNIZAP_MEDIA_REQUEST_TIMEOUT_MS = Number(
+  process.env.OMNIZAP_MEDIA_REQUEST_TIMEOUT_MS || 15 * 1000
+);
+const OMNIZAP_MEDIA_CACHE_TTL_MS = Number(
+  process.env.OMNIZAP_MEDIA_CACHE_TTL_MS || 10 * 60 * 1000
+);
+const OMNIZAP_MEDIA_MAX_BYTES = Number(
+  process.env.OMNIZAP_MEDIA_MAX_BYTES || 512 * 1024
 );
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -105,6 +117,15 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'pending',
     created_at INTEGER NOT NULL,
     delivered_at INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS omnizap_media_cache (
+    client_id TEXT NOT NULL,
+    media_key TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    payload_base64 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (client_id, media_key)
   );
 `);
 
@@ -203,6 +224,32 @@ const selectOmnizapOutboxPendingStatsStmt = db.prepare(`
   WHERE status = 'pending'
   GROUP BY target_client
   ORDER BY pending DESC, target_client ASC
+`);
+
+const selectFreshOmnizapMediaCacheStmt = db.prepare(`
+  SELECT content_type, payload_base64, size_bytes, fetched_at
+  FROM omnizap_media_cache
+  WHERE client_id = ?
+    AND media_key = ?
+    AND fetched_at >= ?
+  LIMIT 1
+`);
+
+const upsertOmnizapMediaCacheStmt = db.prepare(`
+  INSERT INTO omnizap_media_cache (
+    client_id,
+    media_key,
+    content_type,
+    payload_base64,
+    size_bytes,
+    fetched_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(client_id, media_key) DO UPDATE SET
+    content_type = excluded.content_type,
+    payload_base64 = excluded.payload_base64,
+    size_bytes = excluded.size_bytes,
+    fetched_at = excluded.fetched_at
 `);
 
 const getGithubUrlFromRequest = (requestUrl) => {
@@ -328,6 +375,22 @@ const sendJson = (response, statusCode, payload, headers = {}) => {
   response.end(JSON.stringify(payload));
 };
 
+const sendBuffer = (
+  response,
+  statusCode,
+  buffer,
+  contentType = "application/octet-stream",
+  headers = {}
+) => {
+  withCors(response);
+  response.writeHead(statusCode, {
+    "Content-Type": contentType,
+    "Content-Length": String(buffer.length),
+    ...headers,
+  });
+  response.end(buffer);
+};
+
 const parseCachedPayload = (cachedRow) => JSON.parse(cachedRow.payload);
 
 const BODY_TOO_LARGE = Symbol("BODY_TOO_LARGE");
@@ -372,6 +435,66 @@ const isOmnizapCommandsPath = (pathname) =>
 
 const isOmnizapWsPath = (pathname) =>
   normalizeRequestPathname(pathname) === normalizeRequestPathname(OMNIZAP_WS_PATH);
+
+const isOmnizapMediaProxyPath = (pathname) =>
+  normalizeRequestPathname(pathname) ===
+  normalizeRequestPathname(OMNIZAP_MEDIA_PROXY_PATH);
+
+const normalizeRelativePath = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!trimmed || trimmed.length > 1024) {
+    return "";
+  }
+
+  const segments = trimmed.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return "";
+  }
+
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") {
+      return "";
+    }
+  }
+
+  return segments.join("/");
+};
+
+const normalizeResourceUrl = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return "";
+  }
+
+  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized, "http://localhost");
+    const segments = parsed.pathname.split("/").filter(Boolean);
+
+    for (const segment of segments) {
+      if (segment === "." || segment === "..") {
+        return "";
+      }
+    }
+
+    return `${parsed.pathname}${parsed.search || ""}`;
+  } catch {
+    return "";
+  }
+};
 
 const getWebhookTokenFromRequest = (request, requestUrl, payload) => {
   const authorizationHeader = request.headers.authorization;
@@ -549,6 +672,130 @@ const sendWsJson = (socket, payload) => {
   }
 };
 
+const pendingMediaRequestsById = new Map();
+
+const getOneOpenSocketForClient = (clientId) => {
+  const sockets = wsClientsById.get(clientId);
+  if (!sockets || sockets.size === 0) {
+    return null;
+  }
+
+  for (const socket of sockets) {
+    if (isWsSocketOpen(socket)) {
+      return socket;
+    }
+  }
+
+  return null;
+};
+
+const resolvePendingMediaRequest = (requestId, value) => {
+  const pending = pendingMediaRequestsById.get(requestId);
+  if (!pending) {
+    return false;
+  }
+
+  pendingMediaRequestsById.delete(requestId);
+  clearTimeout(pending.timeoutId);
+  pending.resolve(value);
+  return true;
+};
+
+const rejectPendingMediaRequest = (requestId, errorMessage) => {
+  const pending = pendingMediaRequestsById.get(requestId);
+  if (!pending) {
+    return false;
+  }
+
+  pendingMediaRequestsById.delete(requestId);
+  clearTimeout(pending.timeoutId);
+  pending.reject(new Error(errorMessage));
+  return true;
+};
+
+const buildMediaRequestFromQuery = (requestUrl) => {
+  const rawRelativePath =
+    requestUrl.searchParams.get("relative_path") ||
+    requestUrl.searchParams.get("path") ||
+    "";
+  const rawResourceUrl = requestUrl.searchParams.get("resource_url") || "";
+  const relativePath = normalizeRelativePath(rawRelativePath);
+  const resourceUrl = normalizeResourceUrl(rawResourceUrl);
+
+  if (!relativePath && !resourceUrl) {
+    return null;
+  }
+
+  if (relativePath) {
+    return {
+      mediaKey: `relative:${relativePath}`,
+      relativePath,
+      resourceUrl: "",
+    };
+  }
+
+  return {
+    mediaKey: `resource:${resourceUrl}`,
+    relativePath: "",
+    resourceUrl,
+  };
+};
+
+const requestMediaFromWebSocketClient = async ({
+  targetClient,
+  relativePath = "",
+  resourceUrl = "",
+}) => {
+  const normalizedClientId = normalizeTargetClient(targetClient);
+  const socket = getOneOpenSocketForClient(normalizedClientId);
+
+  if (!socket) {
+    throw new Error(`Cliente OmniZap '${normalizedClientId}' nao esta conectado.`);
+  }
+
+  const requestId = randomUUID();
+  const requestPromise = new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      rejectPendingMediaRequest(
+        requestId,
+        `Tempo limite excedido aguardando midia do cliente '${normalizedClientId}'.`
+      );
+    }, OMNIZAP_MEDIA_REQUEST_TIMEOUT_MS);
+
+    pendingMediaRequestsById.set(requestId, {
+      resolve,
+      reject,
+      timeoutId,
+    });
+  });
+
+  const sent = sendWsJson(socket, {
+    type: "server_event",
+    delivery_id: 0,
+    target_client: normalizedClientId,
+    queued_at: Date.now(),
+    event: {
+      type: "fetch_media",
+      request_id: requestId,
+      relative_path: relativePath || undefined,
+      resource_url: resourceUrl || undefined,
+      max_bytes: OMNIZAP_MEDIA_MAX_BYTES,
+    },
+  });
+
+  if (!sent) {
+    rejectPendingMediaRequest(
+      requestId,
+      `Nao foi possivel enviar pedido de midia para '${normalizedClientId}'.`
+    );
+    throw new Error(
+      `Nao foi possivel enviar pedido de midia para '${normalizedClientId}'.`
+    );
+  }
+
+  return requestPromise;
+};
+
 const enqueueOmnizapOutboxMessage = ({
   targetClient = OMNIZAP_DEFAULT_TARGET_CLIENT,
   type = "event",
@@ -667,6 +914,7 @@ const getWsStatusSnapshot = () => {
 
   return {
     websocket_path: OMNIZAP_WS_PATH,
+    media_proxy_path: OMNIZAP_MEDIA_PROXY_PATH,
     connected_clients: clients,
     total_connections: clients.reduce(
       (acc, entry) => acc + Number(entry.connections || 0),
@@ -674,6 +922,7 @@ const getWsStatusSnapshot = () => {
     ),
     outbox_pending_total: totalPending,
     outbox_pending_by_target: pendingByTarget,
+    pending_media_requests: pendingMediaRequestsById.size,
   };
 };
 
@@ -851,6 +1100,32 @@ const handleOmnizapWsMessage = (socket, rawData) => {
 
   if (messageType === "ack") {
     markOutboxMessageDelivered(message.delivery_id);
+    return;
+  }
+
+  if (messageType === "media_response") {
+    const requestId =
+      (typeof message.request_id === "string" && message.request_id.trim()) ||
+      (typeof message.requestId === "string" && message.requestId.trim()) ||
+      "";
+
+    if (!requestId) {
+      sendWsJson(socket, {
+        type: "error",
+        message: "media_response sem request_id.",
+      });
+      return;
+    }
+
+    const mediaPayload =
+      message.payload && typeof message.payload === "object" && !Array.isArray(message.payload)
+        ? message.payload
+        : message;
+
+    resolvePendingMediaRequest(requestId, {
+      source_client_id: socket.clientId || "unknown",
+      payload: mediaPayload,
+    });
     return;
   }
 
@@ -1181,6 +1456,134 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (isOmnizapMediaProxyPath(requestPathname)) {
+    const mediaRequest = buildMediaRequestFromQuery(requestUrl);
+
+    if (!mediaRequest) {
+      sendJson(response, 200, {
+        status: "ready",
+        message:
+          "Proxy de midia OmniZap ativo. Informe relative_path ou resource_url por query string.",
+        method: "GET",
+        media_proxy_path: OMNIZAP_MEDIA_PROXY_PATH,
+        required_params: ["client_id", "relative_path|resource_url"],
+      });
+      return;
+    }
+
+    if (!OMNIZAP_WS_TOKEN) {
+      sendJson(response, 503, {
+        error: "Proxy de midia indisponivel. OMNIZAP_WS_TOKEN nao configurado.",
+      });
+      return;
+    }
+
+    const targetClient = normalizeTargetClient(
+      requestUrl.searchParams.get("client_id") ||
+        requestUrl.searchParams.get("target_client"),
+      OMNIZAP_DEFAULT_TARGET_CLIENT
+    );
+    const now = Date.now();
+    const cachedMedia = selectFreshOmnizapMediaCacheStmt.get(
+      targetClient,
+      mediaRequest.mediaKey,
+      now - OMNIZAP_MEDIA_CACHE_TTL_MS
+    );
+
+    if (cachedMedia?.payload_base64 && cachedMedia?.content_type) {
+      const buffer = Buffer.from(cachedMedia.payload_base64, "base64");
+      sendBuffer(response, 200, buffer, cachedMedia.content_type, {
+        "Cache-Control": "public, max-age=60",
+        "X-Omnizap-Media-Source": "cache",
+        "X-Omnizap-Media-Client": targetClient,
+      });
+      return;
+    }
+
+    let mediaResult = null;
+    try {
+      mediaResult = await requestMediaFromWebSocketClient({
+        targetClient,
+        relativePath: mediaRequest.relativePath,
+        resourceUrl: mediaRequest.resourceUrl,
+      });
+    } catch (mediaError) {
+      sendJson(response, 503, {
+        error: "Falha ao requisitar midia para o cliente OmniZap.",
+        details: String(mediaError?.message || mediaError),
+        target_client: targetClient,
+      });
+      return;
+    }
+
+    const mediaPayload =
+      mediaResult?.payload &&
+      typeof mediaResult.payload === "object" &&
+      !Array.isArray(mediaResult.payload)
+        ? mediaResult.payload
+        : {};
+
+    if (mediaPayload.ok === false) {
+      sendJson(response, 502, {
+        error: "Cliente OmniZap retornou erro ao buscar midia.",
+        details: mediaPayload.error || "Erro desconhecido.",
+        target_client: targetClient,
+      });
+      return;
+    }
+
+    const dataBase64 =
+      (typeof mediaPayload.data_base64 === "string" && mediaPayload.data_base64) ||
+      (typeof mediaPayload.base64 === "string" && mediaPayload.base64) ||
+      "";
+    if (!dataBase64) {
+      sendJson(response, 502, {
+        error: "Cliente OmniZap nao retornou conteudo de midia.",
+        target_client: targetClient,
+      });
+      return;
+    }
+
+    const mediaBuffer = Buffer.from(dataBase64, "base64");
+    if (mediaBuffer.length === 0) {
+      sendJson(response, 502, {
+        error: "Payload de midia retornou vazio.",
+        target_client: targetClient,
+      });
+      return;
+    }
+
+    if (mediaBuffer.length > OMNIZAP_MEDIA_MAX_BYTES) {
+      sendJson(response, 413, {
+        error: "Arquivo de midia excede limite permitido.",
+        max_bytes: OMNIZAP_MEDIA_MAX_BYTES,
+        received_bytes: mediaBuffer.length,
+      });
+      return;
+    }
+
+    const contentType =
+      typeof mediaPayload.content_type === "string" && mediaPayload.content_type.trim()
+        ? mediaPayload.content_type.trim().slice(0, 255)
+        : "application/octet-stream";
+
+    upsertOmnizapMediaCacheStmt.run(
+      targetClient,
+      mediaRequest.mediaKey,
+      contentType,
+      mediaBuffer.toString("base64"),
+      mediaBuffer.length,
+      now
+    );
+
+    sendBuffer(response, 200, mediaBuffer, contentType, {
+      "Cache-Control": "public, max-age=60",
+      "X-Omnizap-Media-Source": "ws",
+      "X-Omnizap-Media-Client": targetClient,
+    });
+    return;
+  }
+
   if (requestPathname === "/api/health") {
     const wsStatus = getWsStatusSnapshot();
     sendJson(response, 200, {
@@ -1192,9 +1595,12 @@ const server = createServer(async (request, response) => {
       omnizap_webhook_alias_path: OMNIZAP_WEBHOOK_ALIAS_PATH,
       omnizap_commands_path: OMNIZAP_COMMANDS_PATH,
       omnizap_ws_path: OMNIZAP_WS_PATH,
+      omnizap_media_proxy_path: OMNIZAP_MEDIA_PROXY_PATH,
       omnizap_ws_enabled: Boolean(OMNIZAP_WS_TOKEN),
       omnizap_ws_connected_clients: wsStatus.connected_clients,
       omnizap_ws_outbox_pending_total: wsStatus.outbox_pending_total,
+      omnizap_media_cache_ttl_ms: OMNIZAP_MEDIA_CACHE_TTL_MS,
+      omnizap_media_max_bytes: OMNIZAP_MEDIA_MAX_BYTES,
     });
     return;
   }
@@ -1307,11 +1713,19 @@ server.listen(PORT, () => {
   );
   console.log(`[github-cache] OmniZap commands path ${OMNIZAP_COMMANDS_PATH}`);
   console.log(`[github-cache] OmniZap WebSocket path ${OMNIZAP_WS_PATH}`);
+  console.log(`[github-cache] OmniZap media proxy path ${OMNIZAP_MEDIA_PROXY_PATH}`);
 });
 
 const shutdown = () => {
   clearInterval(wsHeartbeatInterval);
   wss.close();
+
+  for (const [requestId, pendingRequest] of pendingMediaRequestsById.entries()) {
+    clearTimeout(pendingRequest.timeoutId);
+    pendingRequest.reject(new Error("Servidor encerrando."));
+    pendingMediaRequestsById.delete(requestId);
+  }
+
   server.close(() => {
     db.close();
     process.exit(0);
