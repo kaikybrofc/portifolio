@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import {
+  hasSupabaseSecretInBrowser,
+  isSupabaseConfigured,
+  supabase,
+} from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 
 const AuthContext = createContext(undefined);
@@ -45,7 +49,9 @@ export const AuthProvider = ({ children }) => {
       toast({
         variant: "destructive",
         title: "Supabase nao configurado",
-        description: "Defina VITE_SUPABASE_* (ou NEXT_PUBLIC_SUPABASE_*) e gere um novo build na VPS.",
+        description: hasSupabaseSecretInBrowser
+          ? "Chave secreta detectada no frontend. Use apenas anon/publishable key e gere novo build."
+          : "Defina VITE_SUPABASE_* (ou NEXT_PUBLIC_SUPABASE_*) e gere um novo build na VPS.",
       });
       return;
     }

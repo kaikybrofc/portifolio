@@ -1,4 +1,8 @@
-import { isSupabaseConfigured, supabase } from './customSupabaseClient';
+import {
+  hasSupabaseSecretInBrowser,
+  isSupabaseConfigured,
+  supabase,
+} from './customSupabaseClient';
 
 // Export the existing configured client to be used throughout the app
-export { isSupabaseConfigured, supabase };
+export { hasSupabaseSecretInBrowser, isSupabaseConfigured, supabase };
