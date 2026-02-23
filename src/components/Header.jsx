@@ -14,6 +14,22 @@ const Header = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
+  const scrollToHashSection = (hash) => {
+    if (!hash) return;
+
+    const targetId = hash.replace("#", "");
+    const element = document.getElementById(targetId);
+    if (!element) return;
+
+    // Compensa o header fixo para a secao nao ficar escondida.
+    const headerOffset = 96;
+    const elementTop = element.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({
+      top: Math.max(0, elementTop - headerOffset),
+      behavior: "smooth",
+    });
+  };
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -34,6 +50,7 @@ const Header = () => {
 
   const handleNavClick = (e, href) => {
     e.preventDefault();
+    const closeMenuDelay = isMobileMenuOpen ? 220 : 0;
     setIsMobileMenuOpen(false);
 
     // If it's the blog route, navigate normally
@@ -43,17 +60,29 @@ const Header = () => {
       return;
     }
 
-    // Hash routing for home sections
+    const hash = href.startsWith("/#") ? href.slice(1) : "";
+    if (!hash) return;
+
+    const delayedScroll = () => {
+      window.setTimeout(() => {
+        scrollToHashSection(hash);
+      }, closeMenuDelay);
+    };
+
+    // Navega para home com hash quando estiver fora da home.
     if (location.pathname !== "/") {
-      navigate(href);
+      navigate(`/${hash}`);
+      delayedScroll();
       return;
     }
 
-    const hash = href.replace('/', '');
-    const element = document.querySelector(hash);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Se o hash ja for o mesmo, garante o scroll mesmo sem mudar rota.
+    if (location.hash === hash) {
+      delayedScroll();
+      return;
     }
+
+    navigate(`/${hash}`);
   };
 
   return (
