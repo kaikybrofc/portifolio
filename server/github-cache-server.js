@@ -41,6 +41,19 @@ const OMNIZAP_WEBHOOK_MAX_BODY_BYTES = Number(
   process.env.OMNIZAP_WEBHOOK_MAX_BODY_BYTES || 1024 * 1024
 );
 
+const normalizeRequestPathname = (pathname) => {
+  if (typeof pathname !== "string" || !pathname.trim()) {
+    return "/";
+  }
+
+  const normalized = pathname.trim();
+  if (normalized === "/") {
+    return "/";
+  }
+
+  return normalized.replace(/\/+$/, "") || "/";
+};
+
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
@@ -137,6 +150,7 @@ const selectLatestOmnizapWebhookEventStmt = db.prepare(`
 `);
 
 const getGithubUrlFromRequest = (requestUrl) => {
+  const pathname = normalizeRequestPathname(requestUrl.pathname);
   const encodePathSegment = (value) => {
     try {
       return encodeURIComponent(decodeURIComponent(value));
@@ -145,13 +159,13 @@ const getGithubUrlFromRequest = (requestUrl) => {
     }
   };
 
-  const userMatch = requestUrl.pathname.match(/^\/api\/github\/users\/([^/]+)$/);
+  const userMatch = pathname.match(/^\/api\/github\/users\/([^/]+)$/);
   if (userMatch) {
     const username = encodePathSegment(userMatch[1]);
     return `https://api.github.com/users/${username}`;
   }
 
-  const reposMatch = requestUrl.pathname.match(
+  const reposMatch = pathname.match(
     /^\/api\/github\/users\/([^/]+)\/repos$/
   );
   if (reposMatch) {
@@ -167,7 +181,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/users/${username}/repos${querySuffix}`;
   }
 
-  const repoMatch = requestUrl.pathname.match(
+  const repoMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)$/
   );
   if (repoMatch) {
@@ -176,7 +190,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/repos/${owner}/${repo}`;
   }
 
-  const repoLanguagesMatch = requestUrl.pathname.match(
+  const repoLanguagesMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/languages$/
   );
   if (repoLanguagesMatch) {
@@ -185,7 +199,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/repos/${owner}/${repo}/languages`;
   }
 
-  const repoCommitsMatch = requestUrl.pathname.match(
+  const repoCommitsMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/commits$/
   );
   if (repoCommitsMatch) {
@@ -202,7 +216,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/repos/${owner}/${repo}/commits${querySuffix}`;
   }
 
-  const repoContributorsMatch = requestUrl.pathname.match(
+  const repoContributorsMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/contributors$/
   );
   if (repoContributorsMatch) {
@@ -219,7 +233,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/repos/${owner}/${repo}/contributors${querySuffix}`;
   }
 
-  const repoReadmeMatch = requestUrl.pathname.match(
+  const repoReadmeMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/readme$/
   );
   if (repoReadmeMatch) {
@@ -228,7 +242,7 @@ const getGithubUrlFromRequest = (requestUrl) => {
     return `https://api.github.com/repos/${owner}/${repo}/readme`;
   }
 
-  const repoLatestReleaseMatch = requestUrl.pathname.match(
+  const repoLatestReleaseMatch = pathname.match(
     /^\/api\/github\/repos\/([^/]+)\/([^/]+)\/releases\/latest$/
   );
   if (repoLatestReleaseMatch) {
@@ -288,8 +302,13 @@ const readJsonBody = async (request, options = {}) => {
   }
 };
 
-const isOmnizapWebhookIngestPath = (pathname) =>
-  pathname === OMNIZAP_WEBHOOK_PATH || pathname === OMNIZAP_WEBHOOK_ALIAS_PATH;
+const isOmnizapWebhookIngestPath = (pathname) => {
+  const normalizedPathname = normalizeRequestPathname(pathname);
+  return (
+    normalizedPathname === normalizeRequestPathname(OMNIZAP_WEBHOOK_PATH) ||
+    normalizedPathname === normalizeRequestPathname(OMNIZAP_WEBHOOK_ALIAS_PATH)
+  );
+};
 
 const getWebhookTokenFromRequest = (request, requestUrl, payload) => {
   const authorizationHeader = request.headers.authorization;
@@ -503,6 +522,7 @@ const fetchWithCache = async (githubUrl) => {
 const server = createServer(async (request, response) => {
   const host = request.headers.host || "localhost";
   const requestUrl = new URL(request.url || "/", `http://${host}`);
+  const requestPathname = normalizeRequestPathname(requestUrl.pathname);
 
   if (request.method === "OPTIONS") {
     withCors(response);
@@ -511,7 +531,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "POST" && isOmnizapWebhookIngestPath(requestUrl.pathname)) {
+  if (request.method === "POST" && isOmnizapWebhookIngestPath(requestPathname)) {
     if (!OMNIZAP_WEBHOOK_TOKEN) {
       sendJson(response, 503, {
         error: "Webhook indisponivel. OMNIZAP_WEBHOOK_TOKEN nao configurado.",
@@ -563,7 +583,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === "POST" && requestUrl.pathname === "/api/visits") {
+  if (request.method === "POST" && requestPathname === "/api/visits") {
     const body = await readJsonBody(request, { maxBytes: 64 * 1024 });
 
     if (body === BODY_TOO_LARGE) {
@@ -606,7 +626,19 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (requestUrl.pathname === "/api/health") {
+  if (isOmnizapWebhookIngestPath(requestPathname)) {
+    sendJson(response, 200, {
+      status: "ready",
+      message: "Webhook OmniZap ativo. Envie dados com POST.",
+      method: "POST",
+      webhook_path: OMNIZAP_WEBHOOK_PATH,
+      webhook_alias_path: OMNIZAP_WEBHOOK_ALIAS_PATH,
+      token_required: true,
+    });
+    return;
+  }
+
+  if (requestPathname === "/api/health") {
     sendJson(response, 200, {
       status: "ok",
       cache_ttl_ms: CACHE_TTL_MS,
@@ -618,7 +650,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (requestUrl.pathname === "/api/visits/stats") {
+  if (requestPathname === "/api/visits/stats") {
     const now = Date.now();
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -642,7 +674,7 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (requestUrl.pathname === "/api/omnizap/webhook/latest") {
+  if (requestPathname === "/api/omnizap/webhook/latest") {
     const latestEvent = selectLatestOmnizapWebhookEventStmt.get();
 
     if (!latestEvent) {

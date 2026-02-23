@@ -119,6 +119,7 @@ Para enviar dados do seu OmniZap local para o portfolio hospedado, use:
 - `POST OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao, protegida por token)
 - Alias fixo aceito: `POST /api/omnizap/webhook/ingest`
 - `GET /api/omnizap/webhook/latest` (ultimo payload recebido, usado pela pagina `/projetos/omnizap-system`)
+- `GET OMNIZAP_WEBHOOK_PATH` (health simples da rota de ingestao; responde `status: "ready"`)
 
 Headers aceitos para autenticacao no POST:
 
