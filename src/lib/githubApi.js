@@ -6,7 +6,30 @@ const normalizeBaseUrl = (baseUrl) => {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
+const parseBooleanEnv = (value) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return null;
+};
+
 const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
+const directFallbackOverride = parseBooleanEnv(
+  import.meta.env.VITE_ALLOW_DIRECT_GITHUB_FALLBACK
+);
+const ALLOW_DIRECT_GITHUB_FALLBACK =
+  directFallbackOverride ?? Boolean(import.meta.env.DEV);
 
 const buildApiUrl = (path) => `${API_BASE_URL}${path}`;
 
@@ -38,7 +61,20 @@ const fetchWithFallback = async (apiUrl, fallbackUrl) => {
   try {
     return await fetchJson(apiUrl);
   } catch (apiError) {
-    console.warn(`[githubApi] API cache unavailable for ${apiUrl}. Using GitHub direct fetch.`, apiError);
+    if (!ALLOW_DIRECT_GITHUB_FALLBACK) {
+      console.warn(
+        `[githubApi] API cache unavailable for ${apiUrl}. Direct GitHub fallback disabled.`,
+        apiError
+      );
+      throw new Error(
+        `[githubApi] GitHub API cache unavailable at ${apiUrl}. Configure VITE_API_BASE_URL for a reachable backend /api endpoint or enable VITE_ALLOW_DIRECT_GITHUB_FALLBACK=true when CSP allows https://api.github.com.`
+      );
+    }
+
+    console.warn(
+      `[githubApi] API cache unavailable for ${apiUrl}. Using GitHub direct fetch.`,
+      apiError
+    );
     return fetchJson(fallbackUrl);
   }
 };

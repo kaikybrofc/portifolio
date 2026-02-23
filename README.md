@@ -55,6 +55,17 @@ Variaveis opcionais:
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
 - `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
+- `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`, `false` em producao)
+
+## Deploy estatico e CSP
+
+Se voce publicar apenas o frontend (sem a API Node), as rotas `/api/github/*` e `/api/visits` nao vao existir.
+Nesses casos:
+
+- Configure `VITE_API_BASE_URL` para apontar para sua API publicada (ex.: `https://api.seudominio.com`)
+- Ou habilite `VITE_ALLOW_DIRECT_GITHUB_FALLBACK=true` e permita `https://api.github.com` na CSP (`connect-src`)
+
+Sem uma dessas opcoes, os dados do GitHub nao serao carregados em producao.
 
 ## Visitas da pagina (SQLite)
 
