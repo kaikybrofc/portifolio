@@ -865,6 +865,10 @@ const requestMediaFromWebSocketClient = async ({
       request_id: requestId,
       relative_path: relativePath || undefined,
       resource_url: resourceUrl || undefined,
+      // Compatibilidade com bridges legados que esperam "url/path/route_path".
+      url: resourceUrl || undefined,
+      path: resourceUrl || undefined,
+      route_path: resourceUrl || undefined,
       max_bytes: OMNIZAP_MEDIA_MAX_BYTES,
     },
   });

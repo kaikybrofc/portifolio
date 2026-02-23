@@ -536,6 +536,19 @@ const OmniZapSystemPage = () => {
             <Lock size={14} className={hasToken ? 'text-cyan-300' : 'text-pink-400'} />
             <span>{statusLabel}</span>
           </div>
+
+          <div className="mt-4">
+            <Button
+              asChild
+              variant="outline"
+              className="border-cyan-300/60 text-cyan-300 hover:bg-cyan-300 hover:text-gray-900"
+            >
+              <Link to="/projetos/omnizap-system/stickers">
+                Abrir tela de stickers
+                <ExternalLink size={14} className="ml-2" />
+              </Link>
+            </Button>
+          </div>
         </motion.div>
 
         {loading ? (
