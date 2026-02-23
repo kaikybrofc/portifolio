@@ -101,7 +101,7 @@ const getReadmeSummary = (readmeData) => {
 };
 
 const OmniZapSystemPage = () => {
-  const { githubToken, currentUser, login } = useAuth();
+  const { githubToken } = useAuth();
   const { toast } = useToast();
 
   const [repo, setRepo] = useState(null);
@@ -149,7 +149,8 @@ const OmniZapSystemPage = () => {
       const requestOptions = hasToken
         ? {
             token: githubToken,
-            preferDirect: true,
+            // Keep API cache as primary source, which can use server-side GITHUB_TOKEN.
+            preferDirect: false,
           }
         : {};
 
@@ -204,8 +205,8 @@ const OmniZapSystemPage = () => {
   }, [loadProjectData]);
 
   const statusLabel = hasToken
-    ? 'Modo autenticado: usando seu token GitHub para dados completos.'
-    : 'Modo visitante: usando dados publicos com suporte ao token do servidor (quando configurado).';
+    ? 'Dados carregados pela API com suporte ao token da sessao.'
+    : 'Dados carregados automaticamente pela API do servidor.';
 
   return (
     <section className="min-h-screen pt-32 pb-20 bg-gray-950 relative overflow-hidden">
@@ -261,22 +262,6 @@ const OmniZapSystemPage = () => {
             <span>{statusLabel}</span>
           </div>
         </motion.div>
-
-        {!hasToken && (
-          <NeonBox color="cyan" className="p-5 bg-gray-900/80 mb-8" hover={false}>
-            <p className="text-gray-200 text-sm md:text-base">
-              Visitantes podem ver os dados sem login quando o backend estiver com
-              <span className="text-cyan-300"> GITHUB_TOKEN </span>
-              configurado. Login e opcional para usar seu proprio token GitHub.
-            </p>
-            <Button
-              onClick={login}
-              className="mt-4 bg-cyan-400 text-gray-900 hover:bg-cyan-500 font-semibold"
-            >
-              {currentUser ? 'Reautorizar token GitHub' : 'Login opcional com GitHub'}
-            </Button>
-          </NeonBox>
-        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-24">

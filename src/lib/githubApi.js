@@ -313,7 +313,22 @@ const getDefaultGitHubRepo = (owner, repo) => ({
 export const fetchGitHubRepo = async (owner, repo, options = {}) => {
   const endpoint = buildRepoEndpoint(owner, repo);
   const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
-  return data || getDefaultGitHubRepo(owner, repo);
+  if (data) {
+    return data;
+  }
+
+  // Backward-compatible fallback for deployments that only expose /users/:username/repos.
+  const ownerRepos = await fetchGitHubRepos(owner, "sort=updated&per_page=100");
+  const normalizedRepoName = String(repo || "").toLowerCase();
+  const fromRepoList = ownerRepos.find((item) => {
+    const byName = String(item?.name || "").toLowerCase() === normalizedRepoName;
+    const byFullName =
+      String(item?.full_name || "").toLowerCase() ===
+      `${String(owner || "").toLowerCase()}/${normalizedRepoName}`;
+    return byName || byFullName;
+  });
+
+  return fromRepoList || getDefaultGitHubRepo(owner, repo);
 };
 
 export const fetchGitHubRepoLanguages = async (owner, repo, options = {}) => {
