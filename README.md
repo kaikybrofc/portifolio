@@ -60,7 +60,7 @@ Variaveis opcionais:
 - `API_PORT` (padrao `8787`)
 - `GITHUB_CACHE_TTL_MS` (padrao `900000`, 15 min)
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
-- `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
+- `GITHUB_TOKEN` (token no backend para aumentar limite da API e servir dados aos visitantes sem login)
 - `VITE_SUPABASE_URL` (obrigatoria para login GitHub via Supabase)
 - `VITE_SUPABASE_ANON_KEY` ou `VITE_SUPABASE_PUBLISHABLE_KEY` (obrigatoria para login GitHub via Supabase)
 - `VITE_SUPABASE_AUTH_REDIRECT_URL` (opcional: forca callback OAuth para um dominio fixo)

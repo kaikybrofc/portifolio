@@ -205,7 +205,7 @@ const OmniZapSystemPage = () => {
 
   const statusLabel = hasToken
     ? 'Modo autenticado: usando seu token GitHub para dados completos.'
-    : 'Modo publico: faca login para consultar com seu token GitHub e ampliar os detalhes.';
+    : 'Modo visitante: usando dados publicos com suporte ao token do servidor (quando configurado).';
 
   return (
     <section className="min-h-screen pt-32 pb-20 bg-gray-950 relative overflow-hidden">
@@ -263,16 +263,17 @@ const OmniZapSystemPage = () => {
         </motion.div>
 
         {!hasToken && (
-          <NeonBox color="magenta" className="p-5 bg-gray-900/80 mb-8" hover={false}>
+          <NeonBox color="cyan" className="p-5 bg-gray-900/80 mb-8" hover={false}>
             <p className="text-gray-200 text-sm md:text-base">
-              Para consultar detalhes com autenticacao GitHub (e reduzir limite de requests),
-              faca login e recarregue esta pagina.
+              Visitantes podem ver os dados sem login quando o backend estiver com
+              <span className="text-cyan-300"> GITHUB_TOKEN </span>
+              configurado. Login e opcional para usar seu proprio token GitHub.
             </p>
             <Button
               onClick={login}
               className="mt-4 bg-cyan-400 text-gray-900 hover:bg-cyan-500 font-semibold"
             >
-              {currentUser ? 'Reautorizar token GitHub' : 'Login com GitHub'}
+              {currentUser ? 'Reautorizar token GitHub' : 'Login opcional com GitHub'}
             </Button>
           </NeonBox>
         )}
