@@ -93,6 +93,15 @@ Endpoints:
 - `POST /api/visits` (registro da visita)
 - `GET /api/visits/stats` (total, ultimas 24h, ultimos 7 dias, top paths)
 
+## Tags no Blog (Supabase)
+
+Para salvar tags no editor e filtrar posts por tag, garanta a coluna `tags` na tabela `blog_posts`:
+
+```sql
+alter table public.blog_posts
+add column if not exists tags text[] default '{}';
+```
+
 ## Build de producao
 
 ```bash

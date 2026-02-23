@@ -8,6 +8,18 @@ import { Save, X, Eye, Code } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useMarkdownStyles } from '@/hooks/useMarkdownStyles.jsx';
 import { Helmet } from 'react-helmet';
+import { parseTags, stringifyTags } from '@/lib/blogTags';
+
+const isTagsColumnMissingError = (error) => {
+  const details = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return (
+    error?.code === 'PGRST204' ||
+    (details.includes('tags') &&
+      (details.includes('column') ||
+        details.includes('schema cache') ||
+        details.includes('does not exist')))
+  );
+};
 
 const BlogPostEditor = () => {
   const { id } = useParams();
@@ -20,6 +32,7 @@ const BlogPostEditor = () => {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
 
@@ -57,6 +70,7 @@ const BlogPostEditor = () => {
           if (data) {
             setTitle(data.title || '');
             setContent(data.content || '');
+            setTagsInput(stringifyTags(data.tags));
           }
         } catch (err) {
           toast({ variant: "destructive", title: "Erro", description: "Post não encontrado." });
@@ -84,6 +98,7 @@ const BlogPostEditor = () => {
       const payload = {
         title: title.trim(),
         content: content.trim(),
+        tags: parseTags(tagsInput),
         author: 'Kaiky Brito',
         updated_at: new Date().toISOString()
       };
@@ -94,30 +109,52 @@ const BlogPostEditor = () => {
 
       let savedPost;
 
-      if (isEditing) {
+      const persistPost = async (postPayload) => {
+        if (isEditing) {
+          const { data, error } = await supabase
+            .from('blog_posts')
+            .update(postPayload)
+            .eq('id', id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          return data;
+        }
+
+        const payloadWithSlug = {
+          ...postPayload,
+          slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+        };
+
         const { data, error } = await supabase
           .from('blog_posts')
-          .update(payload)
-          .eq('id', id)
+          .insert([payloadWithSlug])
           .select()
           .single();
 
         if (error) throw error;
-        savedPost = data;
-        toast({ title: "Sucesso!", description: "Post atualizado com sucesso." });
-      } else {
-        payload.slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        return data;
+      };
 
-        const { data, error } = await supabase
-          .from('blog_posts')
-          .insert([payload])
-          .select()
-          .single();
+      try {
+        savedPost = await persistPost(payload);
+      } catch (errorWithTags) {
+        if (!isTagsColumnMissingError(errorWithTags)) throw errorWithTags;
 
-        if (error) throw error;
-        savedPost = data;
-        toast({ title: "Sucesso!", description: "Novo post criado com sucesso." });
+        const { tags, ...payloadWithoutTags } = payload;
+        savedPost = await persistPost(payloadWithoutTags);
+        toast({
+          title: "Post salvo sem tags",
+          description: "A coluna tags ainda não existe no banco. Atualize o schema para ativar o filtro por tags.",
+          variant: "destructive"
+        });
       }
+
+      toast({
+        title: "Sucesso!",
+        description: isEditing ? "Post atualizado com sucesso." : "Novo post criado com sucesso."
+      });
 
       navigate(`/blog/${savedPost.id}`);
     } catch (err) {
@@ -195,6 +232,23 @@ const BlogPostEditor = () => {
             )}
             <span className="hidden md:inline">{isEditing ? 'Atualizar' : 'Publicar'}</span>
           </Button>
+        </div>
+      </div>
+
+      <div className="bg-gray-900/60 border-b border-gray-800 px-4 py-3">
+        <div className="max-w-2xl">
+          <label htmlFor="post-tags" className="block text-xs uppercase tracking-wide text-gray-500 mb-1">
+            Tags
+          </label>
+          <input
+            id="post-tags"
+            type="text"
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="react, supabase, auth"
+            className="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-cyan-400"
+          />
+          <p className="text-xs text-gray-500 mt-1">Separe as tags por vírgula.</p>
         </div>
       </div>
 

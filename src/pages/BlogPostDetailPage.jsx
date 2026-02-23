@@ -10,6 +10,7 @@ import BlogComments from '@/components/BlogComments';
 import ReactMarkdown from 'react-markdown';
 import { useMarkdownStyles } from '@/hooks/useMarkdownStyles.jsx';
 import { useToast } from '@/components/ui/use-toast';
+import { getPostTags } from '@/lib/blogTags';
 
 const BlogPostDetailPage = () => {
   const { id } = useParams();
@@ -79,11 +80,13 @@ const BlogPostDetailPage = () => {
     );
   }
 
+  const postTags = getPostTags(post);
+
   return (
     <div className="min-h-screen pt-32 pb-20 bg-gray-950 relative">
       <Helmet>
         <title>{post.title} | Kaiky Brito Blog</title>
-        <meta name="description" content={post.content.substring(0, 160).replace(/[#*`_~\[\]()]/g, '')} />
+        <meta name="description" content={String(post.content || '').substring(0, 160).replace(/[#*`_~\[\]()]/g, '')} />
       </Helmet>
 
       <div className="absolute inset-0 opacity-5 pointer-events-none">
@@ -138,6 +141,19 @@ const BlogPostDetailPage = () => {
               </span>
             )}
           </div>
+
+          {postTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-8">
+              {postTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-xs px-2.5 py-1 rounded-full bg-gray-800 text-cyan-300 border border-cyan-400/20"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="mb-16">
             <ReactMarkdown components={markdownComponents}>
