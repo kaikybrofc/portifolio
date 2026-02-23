@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 import {
   ArrowLeft,
   Calendar,
@@ -82,29 +83,94 @@ const toReadmeText = (readmeData) => {
   }
 };
 
-const stripMarkdown = (value) =>
-  value
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/[>*_~|-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const normalizeReleaseMarkdown = (value) =>
+  String(value || '').replace(
+    /(^|[\s(])(https?:\/\/[^\s)<]+)(?=$|[\s)])/g,
+    (_match, prefix, url) => `${prefix}<${url}>`
+  );
 
-const getReadmeSummary = (readmeData, repoData) => {
-  const text = toReadmeText(readmeData);
-  if (!text) {
-    return stripMarkdown(repoData?.description || '');
-  }
+const convertHtmlImagesToMarkdown = (value) =>
+  String(value || '').replace(/<img\b[^>]*>/gi, (tag) => {
+    const srcMatch = tag.match(/\bsrc=["']([^"']+)["']/i);
+    if (!srcMatch?.[1]) {
+      return '';
+    }
 
-  const lines = text
-    .split(/\n\s*\n/)
-    .map((line) => stripMarkdown(line))
-    .filter((line) => line.length > 40);
+    const altMatch = tag.match(/\balt=["']([^"']*)["']/i);
+    const rawAlt = String(altMatch?.[1] || 'Imagem');
+    const safeAlt = rawAlt.replace(/\]/g, '\\]');
+    return `![${safeAlt}](${srcMatch[1]})`;
+  });
 
-  return lines[0] || stripMarkdown(text).slice(0, 320);
+const normalizeReadmeMarkdown = (value) =>
+  normalizeReleaseMarkdown(convertHtmlImagesToMarkdown(String(value || ''))).trim();
+
+const releaseMarkdownComponents = {
+  h1: ({ node, ...props }) => <h4 className="text-base font-semibold text-white mt-3 mb-2" {...props} />,
+  h2: ({ node, ...props }) => <h4 className="text-base font-semibold text-white mt-3 mb-2" {...props} />,
+  h3: ({ node, ...props }) => <h5 className="text-sm font-semibold text-white mt-2 mb-2" {...props} />,
+  p: ({ node, ...props }) => <p className="text-sm text-gray-300 leading-relaxed mb-2" {...props} />,
+  a: ({ node, ...props }) => (
+    <a
+      className="text-cyan-300 underline decoration-cyan-400/40 hover:text-pink-300"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    />
+  ),
+  ul: ({ node, ...props }) => <ul className="list-disc list-inside text-sm text-gray-300 space-y-1 mb-2" {...props} />,
+  ol: ({ node, ...props }) => <ol className="list-decimal list-inside text-sm text-gray-300 space-y-1 mb-2" {...props} />,
+  li: ({ node, ...props }) => <li className="text-sm text-gray-300" {...props} />,
+  code: ({ node, inline, ...props }) =>
+    inline ? (
+      <code className="rounded bg-gray-800 px-1 py-0.5 text-xs text-cyan-300" {...props} />
+    ) : (
+      <code className="block rounded bg-gray-900 border border-gray-700 p-2 text-xs text-cyan-200 overflow-x-auto mb-2" {...props} />
+    ),
+  blockquote: ({ node, ...props }) => (
+    <blockquote className="border-l-2 border-pink-400/60 pl-3 italic text-gray-300 mb-2" {...props} />
+  ),
+};
+
+const readmeMarkdownComponents = {
+  h1: ({ node, ...props }) => <h2 className="text-2xl font-bold text-white mt-6 mb-3" {...props} />,
+  h2: ({ node, ...props }) => <h3 className="text-xl font-semibold text-cyan-300 mt-5 mb-3" {...props} />,
+  h3: ({ node, ...props }) => <h4 className="text-lg font-semibold text-pink-300 mt-4 mb-2" {...props} />,
+  p: ({ node, ...props }) => <p className="text-sm text-gray-300 leading-relaxed mb-3" {...props} />,
+  a: ({ node, ...props }) => (
+    <a
+      className="text-cyan-300 underline decoration-cyan-400/40 hover:text-pink-300"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    />
+  ),
+  ul: ({ node, ...props }) => (
+    <ul className="list-disc list-inside text-sm text-gray-300 space-y-1 mb-3" {...props} />
+  ),
+  ol: ({ node, ...props }) => (
+    <ol className="list-decimal list-inside text-sm text-gray-300 space-y-1 mb-3" {...props} />
+  ),
+  li: ({ node, ...props }) => <li className="text-sm text-gray-300" {...props} />,
+  code: ({ node, inline, ...props }) =>
+    inline ? (
+      <code className="rounded bg-gray-800 px-1 py-0.5 text-xs text-cyan-300" {...props} />
+    ) : (
+      <code
+        className="block rounded bg-gray-900 border border-gray-700 p-3 text-xs text-cyan-200 overflow-x-auto mb-3"
+        {...props}
+      />
+    ),
+  blockquote: ({ node, ...props }) => (
+    <blockquote className="border-l-2 border-pink-400/60 pl-3 italic text-gray-300 mb-3" {...props} />
+  ),
+  img: ({ node, ...props }) => (
+    <img
+      loading="lazy"
+      className="max-w-full h-auto rounded-md border border-cyan-400/20 bg-gray-900/60 my-3"
+      {...props}
+    />
+  ),
 };
 
 const getWebhookRoutesPayload = (payload) => {
@@ -185,7 +251,7 @@ const OmniZapSystemPage = () => {
   const [commits, setCommits] = useState([]);
   const [contributors, setContributors] = useState([]);
   const [latestRelease, setLatestRelease] = useState(null);
-  const [readmeSummary, setReadmeSummary] = useState('');
+  const [readmeMarkdown, setReadmeMarkdown] = useState('');
   const [webhookSnapshot, setWebhookSnapshot] = useState(null);
   const [wsStatus, setWsStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -419,7 +485,7 @@ const OmniZapSystemPage = () => {
         setCommits(commitsData);
         setContributors(contributorsData);
         setLatestRelease(releaseData);
-        setReadmeSummary(getReadmeSummary(readmeData, repoData));
+        setReadmeMarkdown(toReadmeText(readmeData));
         setWebhookSnapshot(webhookData);
         setWsStatus(wsStatusData);
       } catch (requestError) {
@@ -829,9 +895,17 @@ const OmniZapSystemPage = () => {
                     <p className="text-gray-300 text-sm mt-1">
                       Publicada em {formatDate(latestRelease.published_at)}
                     </p>
-                    <p className="text-gray-300 mt-3 text-sm leading-relaxed line-clamp-5">
-                      {latestRelease.body || 'Sem notas de release publicas.'}
-                    </p>
+                    {latestRelease.body ? (
+                      <div className="mt-3 max-h-64 overflow-y-auto pr-1">
+                        <ReactMarkdown components={releaseMarkdownComponents}>
+                          {normalizeReleaseMarkdown(latestRelease.body)}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-gray-300 mt-3 text-sm leading-relaxed">
+                        Sem notas de release publicas.
+                      </p>
+                    )}
                     <Button
                       asChild
                       variant="outline"
@@ -999,14 +1073,18 @@ const OmniZapSystemPage = () => {
             <NeonBox color="magenta" className="p-6 bg-gray-900/80" hover={false}>
               <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                 <FileText size={18} />
-                Resumo do README
+                README completo
               </h3>
 
-              {readmeSummary ? (
-                <p className="text-gray-300 leading-relaxed">{readmeSummary}</p>
+              {readmeMarkdown ? (
+                <div className="mt-3 space-y-1">
+                  <ReactMarkdown components={readmeMarkdownComponents}>
+                    {normalizeReadmeMarkdown(readmeMarkdown)}
+                  </ReactMarkdown>
+                </div>
               ) : (
                 <p className="text-gray-400 text-sm">
-                  Nao foi possivel gerar resumo automatico do README.
+                  Nao foi possivel carregar o README completo.
                 </p>
               )}
             </NeonBox>
