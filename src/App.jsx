@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import Header from '@/components/Header';
@@ -13,10 +13,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { useVisitors } from '@/hooks/useVisitors';
 import { AuthProvider } from '@/contexts/AuthContext';
 
-// Import Blog Pages
-import BlogListPage from '@/pages/BlogListPage';
-import BlogPostDetailPage from '@/pages/BlogPostDetailPage';
-import BlogPostEditor from '@/pages/BlogPostEditor';
+// Lazy load blog pages to reduce initial bundle size.
+const BlogListPage = lazy(() => import('@/pages/BlogListPage'));
+const BlogPostDetailPage = lazy(() => import('@/pages/BlogPostDetailPage'));
+const BlogPostEditor = lazy(() => import('@/pages/BlogPostEditor'));
 
 // Component to handle tracking and hash routing on mount
 const HomePage = () => {
@@ -72,31 +72,33 @@ function App() {
 
           <Header />
 
-          <Routes>
-            <Route path="/" element={<HomePage />} />
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
 
-            {/* Blog Routes */}
-            <Route path="/blog" element={<BlogListPage />} />
-            <Route path="/blog/:id" element={<BlogPostDetailPage />} />
+              {/* Blog Routes */}
+              <Route path="/blog" element={<BlogListPage />} />
+              <Route path="/blog/:id" element={<BlogPostDetailPage />} />
 
-            {/* Editor Routes (Protected) */}
-            <Route
-              path="/blog/editor"
-              element={
-                <ProtectedRoute>
-                  <BlogPostEditor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/blog/:id/edit"
-              element={
-                <ProtectedRoute>
-                  <BlogPostEditor />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
+              {/* Editor Routes (Protected) */}
+              <Route
+                path="/blog/editor"
+                element={
+                  <ProtectedRoute>
+                    <BlogPostEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/blog/:id/edit"
+                element={
+                  <ProtectedRoute>
+                    <BlogPostEditor />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Suspense>
 
           <Footer />
           <Toaster />
@@ -105,5 +107,11 @@ function App() {
     </AuthProvider>
   );
 }
+
+const RouteLoadingFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-400"></div>
+  </div>
+);
 
 export default App;

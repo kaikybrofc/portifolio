@@ -5,6 +5,16 @@ import path from "node:path";
 export default defineConfig({
   envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "markdown-vendor": ["react-markdown", "react-syntax-highlighter"],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {
