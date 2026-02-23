@@ -150,6 +150,9 @@ OMNIZAP_WEBHOOK_TOKEN=SEU_TOKEN_FORTE \
 npm run webhook:omnizap:push
 ```
 
+Importante: execute esse comando na maquina que consegue acessar o OmniZap (`OMNIZAP_LOCAL_BASE_URL`).
+Se rodar na VPS sem o OmniZap disponivel nela, as rotas locais vao falhar.
+
 ## Anti-spam em formularios
 
 Contato e comentarios possuem:

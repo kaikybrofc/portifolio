@@ -69,25 +69,43 @@ const fetchJson = async (url) => {
 
 const collectLocalRoutes = async () => {
   const routeData = {};
+  let successCount = 0;
+  let failureCount = 0;
 
   for (const endpoint of endpoints) {
     const url = `${localBaseUrl}${endpoint.path}`;
     try {
       routeData[endpoint.key] = await fetchJson(url);
+      successCount += 1;
       console.log(`[omnizap-webhook] OK ${endpoint.path}`);
     } catch (error) {
       routeData[endpoint.key] = {
         error: String(error),
       };
+      failureCount += 1;
       console.warn(`[omnizap-webhook] ERRO ${endpoint.path}:`, error.message);
     }
   }
 
-  return routeData;
+  return {
+    routeData,
+    successCount,
+    failureCount,
+  };
 };
 
 const pushWebhook = async () => {
-  const routeData = await collectLocalRoutes();
+  const { routeData, successCount, failureCount } = await collectLocalRoutes();
+
+  console.log(
+    `[omnizap-webhook] Resumo coleta local: ${successCount} sucesso(s), ${failureCount} falha(s)`
+  );
+
+  if (successCount === 0) {
+    throw new Error(
+      "[omnizap-webhook] Nenhuma rota local respondeu. Verifique OMNIZAP_LOCAL_BASE_URL e se o OmniZap esta acessivel desta maquina."
+    );
+  }
 
   const payload = {
     source: "omnizap-local",
