@@ -8,6 +8,7 @@
     "dev:web": "vite --host :: --port 3000",
     "dev:api": "node server/github-cache-server.js",
     "webhook:omnizap:push": "node tools/push-omnizap-webhook.js",
+    "omnizap:bridge": "node tools/omnizap-ws-bridge.js",
     "build": "[ -f tools/generate-llms.js ] && node tools/generate-llms.js; [ -f tools/generate-seo-assets.js ] && node tools/generate-seo-assets.js; vite build",
     "preview": "vite preview --host :: --port 3000",
     "lint": "eslint . --quiet",
@@ -36,7 +37,8 @@
     "react-router-dom": "^7.1.1",
     "react-syntax-highlighter": "^15.5.0",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@babel/generator": "^7.26.3",

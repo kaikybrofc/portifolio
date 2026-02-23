@@ -36,6 +36,7 @@ API cache local: `http://localhost:8787`
 - `npm run dev:web`: inicia apenas o frontend (Vite)
 - `npm run dev:api`: inicia apenas a API de cache (SQLite)
 - `npm run webhook:omnizap:push`: coleta rotas do OmniZap local e envia para o webhook secreto
+- `npm run omnizap:bridge`: conecta o OmniZap local em canal WebSocket persistente com a VPS
 - `npm run build`: gera `sitemap.xml` + `rss.xml` e depois build de producao em `dist/`
 - `npm run preview`: serve o build localmente
 - `npm run lint`: executa lint sem warnings
@@ -75,6 +76,18 @@ Variaveis opcionais:
 - `OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao; padrao `/api/webhooks/omnizap-ingest`)
 - `OMNIZAP_WEBHOOK_TOKEN` (token obrigatorio para aceitar POST do webhook)
 - `OMNIZAP_WEBHOOK_MAX_BODY_BYTES` (limite de payload; padrao `1048576`)
+- `OMNIZAP_WS_PATH` (rota WebSocket na VPS; padrao `/api/omnizap/ws`)
+- `OMNIZAP_WS_TOKEN` (token do canal WebSocket; fallback para `OMNIZAP_WEBHOOK_TOKEN`)
+- `OMNIZAP_COMMANDS_PATH` (rota HTTP para enfileirar comandos; padrao `/api/omnizap/commands`)
+- `OMNIZAP_CONTROL_TOKEN` (token dos comandos; fallback para `OMNIZAP_WEBHOOK_TOKEN`)
+- `OMNIZAP_DEFAULT_TARGET_CLIENT` (cliente alvo padrao na fila; padrao `default`)
+- `OMNIZAP_WS_HEARTBEAT_MS` (heartbeat backend WS; padrao `30000`)
+- `OMNIZAP_WS_MAX_MESSAGE_BYTES` (limite de payload WS; padrao `1048576`)
+- `OMNIZAP_WS_URL` (URL `ws://`/`wss://` usada pelo bridge local)
+- `OMNIZAP_CLIENT_ID` (id fixo do cliente local; recomendado em producao)
+- `OMNIZAP_WS_SYNC_INTERVAL_MS` (sync periodico do bridge; padrao `60000`)
+- `OMNIZAP_WS_HEARTBEAT_INTERVAL_MS` (heartbeat do bridge; padrao `25000`)
+- `OMNIZAP_WS_RECONNECT_MAX_MS` (backoff maximo do bridge; padrao `30000`)
 
 ## Deploy estatico e CSP
 
@@ -112,54 +125,63 @@ Dashboard:
 - `/analytics` (rota protegida: visivel apenas para o owner autenticado)
 - `/projetos/omnizap-system` (pagina dedicada com detalhes avancados do projeto OmniZap System)
 
-## Webhook OmniZap (localhost -> site)
+## OmniZap em tempo real (WebSocket + webhook + fila)
 
-Para enviar dados do seu OmniZap local para o portfolio hospedado, use:
+Arquitetura recomendada:
 
-- `POST OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao, protegida por token)
-- Alias fixo aceito: `POST /api/omnizap/webhook/ingest`
-- `GET /api/omnizap/webhook/latest` (ultimo payload recebido, usado pela pagina `/projetos/omnizap-system`)
-- `GET OMNIZAP_WEBHOOK_PATH` (health simples da rota de ingestao; responde `status: "ready"`)
+- O OmniZap local abre conexao WebSocket para a VPS (`wss://seu-dominio.com/api/omnizap/ws`)
+- A VPS recebe eventos HTTP (`POST`) e enfileira no outbox SQLite
+- Se o cliente local estiver conectado, a VPS entrega no WebSocket na hora
+- Se estiver offline, a mensagem fica pendente e e entregue quando reconectar
 
-Headers aceitos para autenticacao no POST:
+Endpoints:
 
-- `Authorization: Bearer <OMNIZAP_WEBHOOK_TOKEN>`
-- ou `x-webhook-token: <OMNIZAP_WEBHOOK_TOKEN>`
-- ou query/body: `token` / `webhook_token`
+- `POST OMNIZAP_WEBHOOK_PATH` e alias `POST /api/omnizap/webhook/ingest` (ingestao de payload)
+- `GET /api/omnizap/webhook/latest` (ultimo snapshot recebido)
+- `POST OMNIZAP_COMMANDS_PATH` (enfileira comando para cliente local)
+- `GET OMNIZAP_WS_PATH` (health rapido do canal WS; resposta `status: "ready"`)
+- `GET /api/omnizap/ws/status` (status de conexoes e fila pendente)
+- `GET /api/health` (health geral, inclui metrica do canal OmniZap)
 
-Exemplo com `curl`:
+Tokens aceitos no HTTP:
+
+- `Authorization: Bearer <token>`
+- `x-webhook-token: <token>`
+- query/body `token` ou `webhook_token`
+
+Cliente local (bridge WebSocket):
 
 ```bash
-curl -X POST "https://seu-dominio.com/api/webhooks/omnizap-ingest" \
-  -H "Authorization: Bearer SEU_TOKEN_FORTE" \
+OMNIZAP_LOCAL_BASE_URL=http://localhost:3000 \
+OMNIZAP_WS_URL=wss://seu-dominio.com/api/omnizap/ws \
+OMNIZAP_WS_TOKEN=SEU_TOKEN_FORTE \
+OMNIZAP_CLIENT_ID=omnizap-local-1 \
+npm run omnizap:bridge
+```
+
+Pedir sincronizacao da VPS para o cliente local:
+
+```bash
+curl -X POST "https://seu-dominio.com/api/omnizap/commands" \
+  -H "Authorization: Bearer SEU_TOKEN_CONTROLE" \
   -H "Content-Type: application/json" \
   -d '{
-    "source": "omnizap-local",
-    "route_data": {
-      "GET /api/sticker-packs": {"count": 12},
-      "GET /api/sticker-packs/orphan-stickers": {"count": 34},
-      "GET /api/sticker-packs/data-files": {"count": 128}
-    }
+    "type": "request_sync",
+    "target_client": "omnizap-local-1",
+    "payload": { "reason": "manual-refresh" }
   }'
 ```
 
-Envio automatizado a partir do OmniZap local:
+Enviar payload direto por POST (modo one-shot, sem WebSocket):
 
 ```bash
-# No projeto do portfolio, com OmniZap rodando localmente
 OMNIZAP_LOCAL_BASE_URL=http://localhost:3000 \
 OMNIZAP_WEBHOOK_URL=https://seu-dominio.com/api/webhooks/omnizap-ingest \
 OMNIZAP_WEBHOOK_TOKEN=SEU_TOKEN_FORTE \
 npm run webhook:omnizap:push
 ```
 
-Importante: execute esse comando na maquina que consegue acessar o OmniZap (`OMNIZAP_LOCAL_BASE_URL`).
-Se rodar na VPS sem o OmniZap disponivel nela, as rotas locais vao falhar.
-
-Fluxo recomendado para producao:
-
-- O `omnizap-system` (em qualquer maquina) envia `POST` direto para `https://seu-dominio.com/api/webhooks/omnizap-ingest`
-- O site salva o ultimo payload recebido e a pagina `/projetos/omnizap-system` atualiza automaticamente (polling)
+Importante: os comandos `webhook:omnizap:push` e `omnizap:bridge` devem rodar na maquina que tem acesso ao OmniZap local. Nao precisam rodar na VPS.
 
 ## Anti-spam em formularios
 

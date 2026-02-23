@@ -28,7 +28,10 @@ import {
   fetchGitHubRepoLanguages,
   fetchGitHubRepoReadme,
 } from '@/lib/githubApi';
-import { fetchOmnizapWebhookLatest } from '@/lib/omnizapWebhookApi';
+import {
+  fetchOmnizapWebhookLatest,
+  fetchOmnizapWsStatus,
+} from '@/lib/omnizapWebhookApi';
 
 const PROJECT_OWNER = 'kaikybrofc';
 const PROJECT_NAME = 'omnizap-system';
@@ -170,6 +173,7 @@ const OmniZapSystemPage = () => {
   const [latestRelease, setLatestRelease] = useState(null);
   const [readmeSummary, setReadmeSummary] = useState('');
   const [webhookSnapshot, setWebhookSnapshot] = useState(null);
+  const [wsStatus, setWsStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -231,6 +235,26 @@ const OmniZapSystemPage = () => {
     };
   }, [webhookSnapshot]);
 
+  const wsSummary = useMemo(() => {
+    if (!wsStatus || typeof wsStatus !== 'object') {
+      return null;
+    }
+
+    const connectedClients = Array.isArray(wsStatus.connected_clients)
+      ? wsStatus.connected_clients
+      : [];
+
+    return {
+      path: wsStatus.websocket_path || '/api/omnizap/ws',
+      totalConnections: Number(wsStatus.total_connections || 0),
+      pendingTotal: Number(wsStatus.outbox_pending_total || 0),
+      connectedClients: connectedClients.slice(0, 6),
+      pendingByTarget: Array.isArray(wsStatus.outbox_pending_by_target)
+        ? wsStatus.outbox_pending_by_target.slice(0, 6)
+        : [],
+    };
+  }, [wsStatus]);
+
   const loadProjectData = useCallback(
     async (isManualRefresh = false) => {
       setError('');
@@ -254,7 +278,15 @@ const OmniZapSystemPage = () => {
           PROJECT_NAME,
           requestOptions
         );
-        const [languagesData, commitsData, contributorsData, releaseData, readmeData, webhookData] =
+        const [
+          languagesData,
+          commitsData,
+          contributorsData,
+          releaseData,
+          readmeData,
+          webhookData,
+          wsStatusData,
+        ] =
           await Promise.all([
             fetchGitHubRepoLanguages(PROJECT_OWNER, PROJECT_NAME, requestOptions),
             fetchGitHubRepoCommits(
@@ -275,6 +307,10 @@ const OmniZapSystemPage = () => {
               console.warn('Nao foi possivel carregar o webhook OmniZap.', webhookError);
               return null;
             }),
+            fetchOmnizapWsStatus().catch((statusError) => {
+              console.warn('Nao foi possivel carregar status WS do OmniZap.', statusError);
+              return null;
+            }),
           ]);
 
         setRepo(repoData);
@@ -291,6 +327,7 @@ const OmniZapSystemPage = () => {
         setLatestRelease(releaseData);
         setReadmeSummary(getReadmeSummary(readmeData, repoData));
         setWebhookSnapshot(webhookData);
+        setWsStatus(wsStatusData);
       } catch (requestError) {
         console.error('Erro ao carregar dados completos do projeto:', requestError);
         const message =
@@ -316,13 +353,19 @@ const OmniZapSystemPage = () => {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      fetchOmnizapWebhookLatest()
-        .then((webhookData) => {
-          setWebhookSnapshot(webhookData);
-        })
-        .catch((webhookError) => {
+      Promise.all([
+        fetchOmnizapWebhookLatest().catch((webhookError) => {
           console.warn('Nao foi possivel atualizar o webhook OmniZap.', webhookError);
-        });
+          return null;
+        }),
+        fetchOmnizapWsStatus().catch((statusError) => {
+          console.warn('Nao foi possivel atualizar status WS do OmniZap.', statusError);
+          return null;
+        }),
+      ]).then(([webhookData, wsStatusData]) => {
+        setWebhookSnapshot(webhookData);
+        setWsStatus(wsStatusData);
+      });
     }, WEBHOOK_POLL_INTERVAL_MS);
 
     return () => {
@@ -546,6 +589,14 @@ const OmniZapSystemPage = () => {
                     <p className="text-sm text-gray-300">
                       Rotas recebidas: <span className="text-cyan-300">{formatCount(webhookSummary.routeCount)}</span>
                     </p>
+                    <p className="text-sm text-gray-300">
+                      Canal WS: <span className="text-cyan-300">{wsSummary?.totalConnections ? 'online' : 'offline'}</span>
+                      {' '}({formatCount(wsSummary?.totalConnections || 0)} conexao(oes))
+                    </p>
+                    <p className="text-sm text-gray-300">
+                      Fila pendente: <span className="text-cyan-300">{formatCount(wsSummary?.pendingTotal || 0)}</span>
+                      {wsSummary?.path ? <span className="text-gray-500"> em {wsSummary.path}</span> : null}
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
                       <div className="rounded-lg border border-cyan-400/30 bg-gray-800/60 p-3">
                         <p className="text-xs text-gray-400">Sticker packs</p>
@@ -585,11 +636,43 @@ const OmniZapSystemPage = () => {
                         ))}
                       </div>
                     )}
+
+                    {wsSummary?.connectedClients?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {wsSummary.connectedClients.map((entry) => (
+                          <span
+                            key={entry.client_id}
+                            className="px-2 py-1 text-xs rounded-full border border-pink-500/40 bg-pink-500/10 text-pink-300"
+                          >
+                            {entry.client_id}: {formatCount(entry.connections)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {wsSummary?.pendingByTarget?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {wsSummary.pendingByTarget.map((entry) => (
+                          <span
+                            key={`${entry.target_client}-${entry.pending}`}
+                            className="px-2 py-1 text-xs rounded-full border border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                          >
+                            fila {entry.target_client}: {formatCount(entry.pending)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">
-                    Nenhum payload do webhook foi recebido ainda.
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-400">
+                      Nenhum payload do webhook foi recebido ainda.
+                    </p>
+                    <p className="text-sm text-gray-400">
+                      Canal WS: <span className="text-cyan-300">{wsSummary?.totalConnections ? 'online' : 'offline'}</span>
+                      {' '}({formatCount(wsSummary?.totalConnections || 0)} conexao(oes))
+                    </p>
+                  </div>
                 )}
               </NeonBox>
 

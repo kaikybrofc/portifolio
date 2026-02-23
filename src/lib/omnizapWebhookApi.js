@@ -67,6 +67,11 @@ const WEBHOOK_LATEST_ENDPOINT = API_BASE_URL
   : USE_RELATIVE_API
     ? "/api/omnizap/webhook/latest"
     : null;
+const WS_STATUS_ENDPOINT = API_BASE_URL
+  ? `${API_BASE_URL}/api/omnizap/ws/status`
+  : USE_RELATIVE_API
+    ? "/api/omnizap/ws/status"
+    : null;
 
 export const fetchOmnizapWebhookLatest = async () => {
   if (!WEBHOOK_LATEST_ENDPOINT) {
@@ -102,5 +107,56 @@ export const fetchOmnizapWebhookLatest = async () => {
       data?.payload && typeof data.payload === "object" && !Array.isArray(data.payload)
         ? data.payload
         : {},
+  };
+};
+
+export const fetchOmnizapWsStatus = async () => {
+  if (!WS_STATUS_ENDPOINT) {
+    return null;
+  }
+
+  const response = await fetch(WS_STATUS_ENDPOINT, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha ao carregar status do canal OmniZap (${response.status}).`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("Resposta do status OmniZap nao esta em JSON.");
+  }
+
+  const data = await response.json();
+  const connectedClients = Array.isArray(data?.connected_clients)
+    ? data.connected_clients
+        .map((entry) => ({
+          client_id:
+            typeof entry?.client_id === "string" ? entry.client_id : "desconhecido",
+          connections: Number(entry?.connections || 0),
+        }))
+        .filter((entry) => entry.connections > 0)
+    : [];
+
+  return {
+    websocket_path:
+      typeof data?.websocket_path === "string" ? data.websocket_path : "/api/omnizap/ws",
+    connected_clients: connectedClients,
+    total_connections: Number(data?.total_connections || 0),
+    outbox_pending_total: Number(data?.outbox_pending_total || 0),
+    outbox_pending_by_target: Array.isArray(data?.outbox_pending_by_target)
+      ? data.outbox_pending_by_target
+          .map((entry) => ({
+            target_client:
+              typeof entry?.target_client === "string"
+                ? entry.target_client
+                : "desconhecido",
+            pending: Number(entry?.pending || 0),
+          }))
+          .filter((entry) => entry.pending > 0)
+      : [],
   };
 };
