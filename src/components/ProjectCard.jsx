@@ -3,6 +3,8 @@ import { NeonBox } from "@/components/NeonGlow";
 import { Button } from "@/components/ui/button";
 import { Github, ExternalLink, Star, GitFork } from "lucide-react";
 import { motion } from "framer-motion";
+import ReactionButtons from "@/components/ReactionButtons";
+import { CONTENT_REACTION_TYPES } from "@/lib/reactions";
 
 const ProjectCard = ({ project }) => {
   const {
@@ -79,6 +81,12 @@ const ProjectCard = ({ project }) => {
             <span>{forks_count}</span>
           </div>
         </div>
+
+        <ReactionButtons
+          contentType={CONTENT_REACTION_TYPES.PROJECT}
+          contentId={project?.id}
+          className="mb-4"
+        />
 
         {/* Action Buttons */}
         <div className="flex gap-3 mt-auto">

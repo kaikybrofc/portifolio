@@ -7,6 +7,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, User, Plus, AlertCircle, RefreshCw, ArrowRight, Search, Tag } from 'lucide-react';
 import { Helmet } from 'react-helmet';
 import { getPostTags } from '@/lib/blogTags';
+import ReactionButtons from '@/components/ReactionButtons';
+import { CONTENT_REACTION_TYPES } from '@/lib/reactions';
 
 const BlogListPage = () => {
   const [posts, setPosts] = useState([]);
@@ -234,6 +236,12 @@ const BlogListPage = () => {
                         ))}
                       </div>
                     )}
+
+                    <ReactionButtons
+                      contentType={CONTENT_REACTION_TYPES.BLOG_POST}
+                      contentId={post.id}
+                      className="mb-4"
+                    />
 
                     <div className="flex items-center text-cyan-400 text-sm font-semibold group-hover:text-pink-500 transition-colors mt-auto">
                       Ler artigo <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />

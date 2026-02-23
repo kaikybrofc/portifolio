@@ -11,6 +11,8 @@ import ReactMarkdown from 'react-markdown';
 import { useMarkdownStyles } from '@/hooks/useMarkdownStyles.jsx';
 import { useToast } from '@/components/ui/use-toast';
 import { getPostTags } from '@/lib/blogTags';
+import ReactionButtons from '@/components/ReactionButtons';
+import { CONTENT_REACTION_TYPES } from '@/lib/reactions';
 
 const BlogPostDetailPage = () => {
   const { id } = useParams();
@@ -154,6 +156,12 @@ const BlogPostDetailPage = () => {
               ))}
             </div>
           )}
+
+          <ReactionButtons
+            contentType={CONTENT_REACTION_TYPES.BLOG_POST}
+            contentId={post.id}
+            className="mb-8"
+          />
 
           <div className="mb-16">
             <ReactMarkdown components={markdownComponents}>

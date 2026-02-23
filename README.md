@@ -102,6 +102,54 @@ alter table public.blog_posts
 add column if not exists tags text[] default '{}';
 ```
 
+## Reacoes (likes/dislikes) em blog e projetos
+
+Para habilitar likes/dislikes no blog e na secao de projetos, crie a tabela abaixo no Supabase:
+
+```sql
+create extension if not exists pgcrypto;
+
+create table if not exists public.content_reactions (
+  id uuid primary key default gen_random_uuid(),
+  content_type text not null,
+  content_id text not null,
+  voter_key text not null,
+  vote smallint not null check (vote in (-1, 1)),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists content_reactions_unique_vote
+  on public.content_reactions (content_type, content_id, voter_key);
+
+alter table public.content_reactions enable row level security;
+
+drop policy if exists "content_reactions_select_all" on public.content_reactions;
+create policy "content_reactions_select_all"
+  on public.content_reactions
+  for select
+  using (true);
+
+drop policy if exists "content_reactions_insert_all" on public.content_reactions;
+create policy "content_reactions_insert_all"
+  on public.content_reactions
+  for insert
+  with check (true);
+
+drop policy if exists "content_reactions_update_all" on public.content_reactions;
+create policy "content_reactions_update_all"
+  on public.content_reactions
+  for update
+  using (true)
+  with check (true);
+
+drop policy if exists "content_reactions_delete_all" on public.content_reactions;
+create policy "content_reactions_delete_all"
+  on public.content_reactions
+  for delete
+  using (true);
+```
+
 ## Build de producao
 
 ```bash

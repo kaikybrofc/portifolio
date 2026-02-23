@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import Hero from '@/components/Hero';
 import AboutSection from '@/components/AboutSection';
 import ProjectsSection from '@/components/ProjectsSection';
+import GitHubActivitySection from '@/components/GitHubActivitySection';
 import SkillsSection from '@/components/SkillsSection';
 import ContactSection from '@/components/ContactSection';
 import Footer from '@/components/Footer';
@@ -41,6 +42,7 @@ const HomePage = () => {
         <Hero />
         <AboutSection />
         <ProjectsSection />
+        <GitHubActivitySection />
         <SkillsSection />
         {/* BlogSection inside home was replaced by the separate Blog routing */}
         <ContactSection />
