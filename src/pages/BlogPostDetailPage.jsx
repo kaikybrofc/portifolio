@@ -83,12 +83,36 @@ const BlogPostDetailPage = () => {
   }
 
   const postTags = getPostTags(post);
+  const postDescription = String(post.content || '')
+    .substring(0, 160)
+    .replace(/[#*`_~\[\]()]/g, '');
+  const postUrl = `https://omnizap.shop/blog/${post.id}`;
+  const postKeywords = [
+    'node.js',
+    'backend engineer brazil',
+    'baileys whatsapp api',
+    'automação whatsapp',
+    ...postTags,
+  ].join(', ');
 
   return (
     <div className="min-h-screen pt-32 pb-20 bg-gray-950 relative">
       <Helmet>
         <title>{post.title} | Kaiky Brito Blog</title>
-        <meta name="description" content={String(post.content || '').substring(0, 160).replace(/[#*`_~\[\]()]/g, '')} />
+        <meta name="description" content={postDescription} />
+        <meta name="keywords" content={postKeywords} />
+        <link rel="canonical" href={postUrl} />
+        <meta property="og:type" content="article" />
+        <meta property="og:locale" content="pt_BR" />
+        <meta property="og:url" content={postUrl} />
+        <meta property="og:site_name" content="Kaiky Brito" />
+        <meta property="og:title" content={`${post.title} | Kaiky Brito Blog`} />
+        <meta property="og:description" content={postDescription} />
+        <meta property="og:image" content="https://omnizap.shop/preview.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={`${post.title} | Kaiky Brito Blog`} />
+        <meta name="twitter:description" content={postDescription} />
+        <meta name="twitter:image" content="https://omnizap.shop/preview.png" />
       </Helmet>
 
       <div className="absolute inset-0 opacity-5 pointer-events-none">

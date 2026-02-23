@@ -78,8 +78,33 @@ const BlogListPage = () => {
   return (
     <div className="min-h-screen pt-32 pb-20 bg-gray-950 relative">
       <Helmet>
-        <title>Blog | Kaiky Brito</title>
-        <meta name="description" content="Artigos e tutoriais sobre desenvolvimento web, React, Node.js e tecnologia." />
+        <title>Blog Node.js e Backend | Kaiky Brito</title>
+        <meta
+          name="description"
+          content="Artigos sobre Node.js, backend, automação WhatsApp com Baileys API e engenharia de software."
+        />
+        <meta
+          name="keywords"
+          content="blog node.js brasil, backend engineer brazil, baileys whatsapp api, automação whatsapp, artigos nodejs"
+        />
+        <link rel="canonical" href="https://omnizap.shop/blog" />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="pt_BR" />
+        <meta property="og:url" content="https://omnizap.shop/blog" />
+        <meta property="og:site_name" content="Kaiky Brito" />
+        <meta property="og:title" content="Blog Node.js e Backend | Kaiky Brito" />
+        <meta
+          property="og:description"
+          content="Conteúdos sobre backend, Node.js e automação WhatsApp para projetos reais."
+        />
+        <meta property="og:image" content="https://omnizap.shop/preview.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Blog Node.js e Backend | Kaiky Brito" />
+        <meta
+          name="twitter:description"
+          content="Conteúdos sobre backend, Node.js e automação WhatsApp para projetos reais."
+        />
+        <meta name="twitter:image" content="https://omnizap.shop/preview.png" />
       </Helmet>
 
       {/* Decorative background elements */}

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://kaikybrofc.github.io/portifolio/sitemap.xml
+Sitemap: https://omnizap.shop/sitemap.xml

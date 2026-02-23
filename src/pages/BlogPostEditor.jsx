@@ -180,6 +180,8 @@ const BlogPostEditor = () => {
     <div className="min-h-screen flex flex-col bg-gray-950 pt-20">
       <Helmet>
         <title>{isEditing ? 'Editar Post' : 'Novo Post'} | Blog Editor</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="googlebot" content="noindex, nofollow" />
       </Helmet>
 
       <div className="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center sticky top-0 z-40">

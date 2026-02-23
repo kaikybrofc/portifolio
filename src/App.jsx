@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import Header from '@/components/Header';
 import Hero from '@/components/Hero';
 import AboutSection from '@/components/AboutSection';
@@ -63,15 +62,6 @@ function App() {
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-gray-950 text-white">
-          <Helmet>
-            <title>Kaiky Brito - Full Stack Developer | Portfolio</title>
-            <meta
-              name="description"
-              content="Portfolio de Kaiky Brito, Full Stack Developer especializado em criar soluções web inovadoras com React, Node.js e tecnologias modernas."
-            />
-            <meta name="keywords" content="full stack developer, web developer, react, node.js, javascript, portfolio" />
-          </Helmet>
-
           <Header />
 
           <Suspense fallback={<RouteLoadingFallback />}>
