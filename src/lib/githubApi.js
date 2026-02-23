@@ -6,6 +6,41 @@ const normalizeBaseUrl = (baseUrl) => {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
+const getRuntimeHostname = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.hostname || "";
+};
+
+const isLoopbackHost = (hostname) =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "::1" ||
+  hostname === "[::1]";
+
+const sanitizeApiBaseUrl = (baseUrl) => {
+  const normalized = normalizeBaseUrl(baseUrl);
+
+  if (!normalized || !import.meta.env.PROD) {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const currentHostname = getRuntimeHostname();
+
+    if (!isLoopbackHost(currentHostname) && isLoopbackHost(parsed.hostname)) {
+      return "";
+    }
+  } catch {
+    // Keep user-provided value when URL parsing fails.
+  }
+
+  return normalized;
+};
+
 const parseBooleanEnv = (value) => {
   if (typeof value !== "string") {
     return null;
@@ -24,16 +59,31 @@ const parseBooleanEnv = (value) => {
   return null;
 };
 
-const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
+const API_BASE_URL = sanitizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
 const useRelativeApiOverride = parseBooleanEnv(
   import.meta.env.VITE_USE_RELATIVE_API
 );
-const USE_RELATIVE_API = useRelativeApiOverride ?? Boolean(import.meta.env.DEV);
+const USE_RELATIVE_API = useRelativeApiOverride ?? true;
 const directFallbackOverride = parseBooleanEnv(
   import.meta.env.VITE_ALLOW_DIRECT_GITHUB_FALLBACK
 );
-const ALLOW_DIRECT_GITHUB_FALLBACK =
-  directFallbackOverride ?? Boolean(import.meta.env.DEV);
+const ALLOW_DIRECT_GITHUB_FALLBACK = (() => {
+  const configuredValue = directFallbackOverride ?? Boolean(import.meta.env.DEV);
+  const runtimeHostname = getRuntimeHostname();
+  const runtimeIsLoopback = isLoopbackHost(runtimeHostname);
+
+  // Browsers on public domains usually block cross-origin API calls with strict CSP.
+  if (import.meta.env.PROD && !runtimeIsLoopback) {
+    return false;
+  }
+
+  // In production with relative /api routing, keep requests same-origin by default.
+  if (import.meta.env.PROD && USE_RELATIVE_API && !API_BASE_URL) {
+    return false;
+  }
+
+  return configuredValue;
+})();
 const SHOULD_LOG = Boolean(import.meta.env.DEV);
 
 const warnedKeys = new Set();
@@ -96,7 +146,16 @@ const fetchJson = async (url) => {
 const fetchWithFallback = async (apiUrl, fallbackUrl) => {
   if (!apiUrl) {
     if (ALLOW_DIRECT_GITHUB_FALLBACK) {
-      return fetchJson(fallbackUrl);
+      try {
+        return await fetchJson(fallbackUrl);
+      } catch (fallbackError) {
+        warnOnce(
+          "github-api-fallback-failed-without-api",
+          `[githubApi] Direct GitHub fallback failed for ${fallbackUrl}. Returning local fallback data.`,
+          fallbackError
+        );
+        return null;
+      }
     }
 
     warnOnce(

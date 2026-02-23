@@ -6,6 +6,41 @@ const normalizeBaseUrl = (baseUrl) => {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
+const getRuntimeHostname = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.hostname || "";
+};
+
+const isLoopbackHost = (hostname) =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname === "::1" ||
+  hostname === "[::1]";
+
+const sanitizeApiBaseUrl = (baseUrl) => {
+  const normalized = normalizeBaseUrl(baseUrl);
+
+  if (!normalized || !import.meta.env.PROD) {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const currentHostname = getRuntimeHostname();
+
+    if (!isLoopbackHost(currentHostname) && isLoopbackHost(parsed.hostname)) {
+      return "";
+    }
+  } catch {
+    // Keep user-provided value when URL parsing fails.
+  }
+
+  return normalized;
+};
+
 const parseBooleanEnv = (value) => {
   if (typeof value !== "string") {
     return null;
@@ -24,11 +59,16 @@ const parseBooleanEnv = (value) => {
   return null;
 };
 
-const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
+const API_BASE_URL = sanitizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
+const useRelativeApiOverride = parseBooleanEnv(import.meta.env.VITE_USE_RELATIVE_API);
+const USE_RELATIVE_API = useRelativeApiOverride ?? true;
 const trackVisitsOverride = parseBooleanEnv(import.meta.env.VITE_ENABLE_VISIT_TRACKING);
-const SHOULD_TRACK_VISITS =
-  trackVisitsOverride ?? Boolean(import.meta.env.DEV || API_BASE_URL);
-const VISIT_ENDPOINT = `${API_BASE_URL}/api/visits`;
+const VISIT_ENDPOINT = API_BASE_URL
+  ? `${API_BASE_URL}/api/visits`
+  : USE_RELATIVE_API
+    ? "/api/visits"
+    : null;
+const SHOULD_TRACK_VISITS = trackVisitsOverride ?? Boolean(import.meta.env.DEV);
 
 const getVisitPayload = () => {
   const path = `${window.location.pathname}${window.location.search}`;
@@ -37,7 +77,7 @@ const getVisitPayload = () => {
 };
 
 export const trackPageVisit = () => {
-  if (!SHOULD_TRACK_VISITS) {
+  if (!SHOULD_TRACK_VISITS || !VISIT_ENDPOINT) {
     return;
   }
 

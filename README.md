@@ -55,9 +55,9 @@ Variaveis opcionais:
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
 - `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
-- `VITE_USE_RELATIVE_API` (padrao: `true` no `npm run dev`, `false` em producao)
-- `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`, `false` em producao)
-- `VITE_ENABLE_VISIT_TRACKING` (padrao: `true` no `npm run dev`, `false` em producao sem API base)
+- `VITE_USE_RELATIVE_API` (padrao: `true`)
+- `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`; em producao publica fica desabilitado para evitar CSP)
+- `VITE_ENABLE_VISIT_TRACKING` (padrao: `true` no `npm run dev`, `false` em producao)
 
 ## Deploy estatico e CSP
 
@@ -66,10 +66,13 @@ Nesses casos:
 
 - Configure `VITE_API_BASE_URL` para apontar para sua API publicada (ex.: `https://api.seudominio.com`)
 - Ou habilite `VITE_USE_RELATIVE_API=true` se seu frontend e backend compartilham o mesmo dominio com rota `/api`
-- Ou habilite `VITE_ALLOW_DIRECT_GITHUB_FALLBACK=true` e permita `https://api.github.com` na CSP (`connect-src`)
 - Para registrar visitas fora do `dev`, habilite `VITE_ENABLE_VISIT_TRACKING=true` e garanta `POST /api/visits`
 
 Sem uma dessas opcoes, os dados do GitHub nao serao carregados em producao.
+
+Importante: nao use `VITE_API_BASE_URL=http://localhost:8787` em build de producao.
+`localhost` so funciona na sua maquina e sera bloqueado em navegadores dos visitantes.
+Use esse valor apenas em `.env.development`.
 
 ## Visitas da pagina (SQLite)
 
