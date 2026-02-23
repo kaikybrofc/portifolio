@@ -166,9 +166,15 @@ const fetchJson = async (url, options = {}) => {
 };
 
 const fetchWithFallback = async (apiUrl, fallbackUrl, options = {}) => {
-  const { token, fallbackAcceptHeader, preferDirect = false } = options;
+  const {
+    token,
+    fallbackAcceptHeader,
+    preferDirect = false,
+    forceDirectFallback = false,
+  } = options;
   const fallbackHeaders = buildGitHubHeaders(token, fallbackAcceptHeader);
   const canUseDirectFallback =
+    forceDirectFallback ||
     ALLOW_DIRECT_GITHUB_FALLBACK ||
     Boolean(typeof token === "string" && token.trim());
 
@@ -240,6 +246,11 @@ const fetchWithFallback = async (apiUrl, fallbackUrl, options = {}) => {
     }
   }
 };
+
+const withForcedDirectFallback = (options = {}) => ({
+  ...options,
+  forceDirectFallback: true,
+});
 
 const getDefaultGitHubUser = (username) => ({
   login: username,
@@ -333,7 +344,11 @@ export const fetchGitHubRepo = async (owner, repo, options = {}) => {
 
 export const fetchGitHubRepoLanguages = async (owner, repo, options = {}) => {
   const endpoint = buildRepoEndpoint(owner, repo, "/languages");
-  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  const data = await fetchWithFallback(
+    endpoint.apiUrl,
+    endpoint.fallbackUrl,
+    withForcedDirectFallback(options)
+  );
   return data && typeof data === "object" && !Array.isArray(data) ? data : {};
 };
 
@@ -344,7 +359,11 @@ export const fetchGitHubRepoCommits = async (
   options = {}
 ) => {
   const endpoint = buildRepoEndpoint(owner, repo, "/commits", queryString);
-  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  const data = await fetchWithFallback(
+    endpoint.apiUrl,
+    endpoint.fallbackUrl,
+    withForcedDirectFallback(options)
+  );
   return Array.isArray(data) ? data : [];
 };
 
@@ -355,13 +374,21 @@ export const fetchGitHubRepoContributors = async (
   options = {}
 ) => {
   const endpoint = buildRepoEndpoint(owner, repo, "/contributors", queryString);
-  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  const data = await fetchWithFallback(
+    endpoint.apiUrl,
+    endpoint.fallbackUrl,
+    withForcedDirectFallback(options)
+  );
   return Array.isArray(data) ? data : [];
 };
 
 export const fetchGitHubLatestRelease = async (owner, repo, options = {}) => {
   const endpoint = buildRepoEndpoint(owner, repo, "/releases/latest");
-  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  const data = await fetchWithFallback(
+    endpoint.apiUrl,
+    endpoint.fallbackUrl,
+    withForcedDirectFallback(options)
+  );
   if (!data || typeof data !== "object") {
     return null;
   }
@@ -375,7 +402,11 @@ export const fetchGitHubLatestRelease = async (owner, repo, options = {}) => {
 
 export const fetchGitHubRepoReadme = async (owner, repo, options = {}) => {
   const endpoint = buildRepoEndpoint(owner, repo, "/readme");
-  const data = await fetchWithFallback(endpoint.apiUrl, endpoint.fallbackUrl, options);
+  const data = await fetchWithFallback(
+    endpoint.apiUrl,
+    endpoint.fallbackUrl,
+    withForcedDirectFallback(options)
+  );
   if (!data || typeof data !== "object") {
     return null;
   }

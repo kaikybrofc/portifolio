@@ -86,10 +86,10 @@ const stripMarkdown = (value) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const getReadmeSummary = (readmeData) => {
+const getReadmeSummary = (readmeData, repoData) => {
   const text = toReadmeText(readmeData);
   if (!text) {
-    return '';
+    return stripMarkdown(repoData?.description || '');
   }
 
   const lines = text
@@ -155,9 +155,13 @@ const OmniZapSystemPage = () => {
         : {};
 
       try {
-        const [repoData, languagesData, commitsData, contributorsData, releaseData, readmeData] =
+        const repoData = await fetchGitHubRepo(
+          PROJECT_OWNER,
+          PROJECT_NAME,
+          requestOptions
+        );
+        const [languagesData, commitsData, contributorsData, releaseData, readmeData] =
           await Promise.all([
-            fetchGitHubRepo(PROJECT_OWNER, PROJECT_NAME, requestOptions),
             fetchGitHubRepoLanguages(PROJECT_OWNER, PROJECT_NAME, requestOptions),
             fetchGitHubRepoCommits(
               PROJECT_OWNER,
@@ -176,11 +180,18 @@ const OmniZapSystemPage = () => {
           ]);
 
         setRepo(repoData);
-        setLanguages(languagesData);
+        const hasLanguages = Object.keys(languagesData || {}).length > 0;
+        setLanguages(
+          hasLanguages
+            ? languagesData
+            : repoData?.language
+              ? { [repoData.language]: 1 }
+              : {}
+        );
         setCommits(commitsData);
         setContributors(contributorsData);
         setLatestRelease(releaseData);
-        setReadmeSummary(getReadmeSummary(readmeData));
+        setReadmeSummary(getReadmeSummary(readmeData, repoData));
       } catch (requestError) {
         console.error('Erro ao carregar dados completos do projeto:', requestError);
         const message =
