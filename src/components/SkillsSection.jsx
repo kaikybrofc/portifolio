@@ -9,7 +9,6 @@ import {
   Palette,
   GitBranch,
 } from "lucide-react";
-import { fetchGitHubRepos } from "@/lib/githubApi";
 
 const SkillsSection = () => {
   const [languages, setLanguages] = useState([]);
@@ -17,7 +16,10 @@ const SkillsSection = () => {
   useEffect(() => {
     const fetchLanguages = async () => {
       try {
-        const repos = await fetchGitHubRepos("kaikybrofc", "per_page=100");
+        const response = await fetch(
+          "https://api.github.com/users/kaikybrofc/repos?per_page=100"
+        );
+        const repos = await response.json();
 
         // Collect unique languages from all repos
         const languageSet = new Set();

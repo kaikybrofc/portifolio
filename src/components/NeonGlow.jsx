@@ -2,13 +2,13 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 // Neon text component with customizable glow - Intensity reduced by 40-50%
-export const NeonText = ({ 
-  children, 
-  className, 
+export const NeonText = ({
+  children,
+  className,
   color = "cyan",
   intensity = "medium",
   animated = false,
-  ...props 
+  ...props
 }) => {
   const colorStyles = {
     cyan: {
@@ -49,13 +49,13 @@ export const NeonText = ({
 };
 
 // Neon box component with border glow - Intensity reduced by 40-50%
-export const NeonBox = ({ 
-  children, 
-  className, 
+export const NeonBox = ({
+  children,
+  className,
   color = "cyan",
   intensity = "medium",
   hover = true,
-  ...props 
+  ...props
 }) => {
   const colorStyles = {
     cyan: {

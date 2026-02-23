@@ -3,7 +3,6 @@ import { NeonText } from "@/components/NeonGlow";
 import ProjectCard from "@/components/ProjectCard";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { fetchGitHubRepos } from "@/lib/githubApi";
 
 const ProjectsSection = () => {
   const [repos, setRepos] = useState([]);
@@ -13,11 +12,16 @@ const ProjectsSection = () => {
   useEffect(() => {
     const fetchRepositories = async () => {
       try {
-        const data = await fetchGitHubRepos(
-          "kaikybrofc",
-          "sort=updated&per_page=100"
+        const response = await fetch(
+          "https://api.github.com/users/kaikybrofc/repos?sort=updated&per_page=100"
         );
-        
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch repositories");
+        }
+
+        const data = await response.json();
+
         // Sort by stars and updated date, filter out forks, take top 6
         const filteredRepos = data
           .filter((repo) => !repo.fork)
@@ -79,7 +83,7 @@ const ProjectsSection = () => {
               Projetos
             </NeonText>
           </h2>
-          <div 
+          <div
             className="h-1 w-32 mx-auto rounded-full bg-gradient-to-r from-pink-500 to-cyan-400"
             style={{ boxShadow: "0 0 20px #ff00ff" }}
           ></div>

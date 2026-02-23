@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
 import Header from '@/components/Header';
 import Hero from '@/components/Hero';
 import AboutSection from '@/components/AboutSection';
@@ -6,35 +8,101 @@ import ProjectsSection from '@/components/ProjectsSection';
 import SkillsSection from '@/components/SkillsSection';
 import ContactSection from '@/components/ContactSection';
 import Footer from '@/components/Footer';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
-import { trackPageVisit } from '@/lib/visitTracker';
+import { useVisitors } from '@/hooks/useVisitors';
+import { AuthProvider } from '@/contexts/AuthContext';
+
+// Import Blog Pages
+import BlogListPage from '@/pages/BlogListPage';
+import BlogPostDetailPage from '@/pages/BlogPostDetailPage';
+import BlogPostEditor from '@/pages/BlogPostEditor';
+
+// Component to handle tracking and hash routing on mount
+const HomePage = () => {
+  useVisitors('home');
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash) {
+      const id = location.hash.replace('#', '');
+      const element = document.getElementById(id);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [location]);
+
+  return (
+    <>
+      <main>
+        <Hero />
+        <AboutSection />
+        <ProjectsSection />
+        <SkillsSection />
+        {/* BlogSection inside home was replaced by the separate Blog routing */}
+        <ContactSection />
+      </main>
+    </>
+  );
+};
 
 function App() {
   useEffect(() => {
     document.documentElement.style.scrollBehavior = 'smooth';
-    trackPageVisit();
-    
     return () => {
       document.documentElement.style.scrollBehavior = 'auto';
     };
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <Header />
-      
-      <main>
-        <Hero />
-        <AboutSection />
-        <ProjectsSection />
-        <SkillsSection />
-        <ContactSection />
-      </main>
-      
-      <Footer />
-      
-      <Toaster />
-    </div>
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-gray-950 text-white">
+          <Helmet>
+            <title>Kaiky Brito - Full Stack Developer | Portfolio</title>
+            <meta
+              name="description"
+              content="Portfolio de Kaiky Brito, Full Stack Developer especializado em criar soluções web inovadoras com React, Node.js e tecnologias modernas."
+            />
+            <meta name="keywords" content="full stack developer, web developer, react, node.js, javascript, portfolio" />
+          </Helmet>
+
+          <Header />
+
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+
+            {/* Blog Routes */}
+            <Route path="/blog" element={<BlogListPage />} />
+            <Route path="/blog/:id" element={<BlogPostDetailPage />} />
+
+            {/* Editor Routes (Protected) */}
+            <Route
+              path="/blog/editor"
+              element={
+                <ProtectedRoute>
+                  <BlogPostEditor />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/blog/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <BlogPostEditor />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+
+          <Footer />
+          <Toaster />
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 

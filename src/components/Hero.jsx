@@ -34,7 +34,7 @@ const Hero = () => {
       <div className="absolute inset-0 bg-gradient-to-b from-gray-900/95 via-gray-900/90 to-gray-900/95"></div>
 
       {/* Animated grid overlay */}
-      <div 
+      <div
         className="absolute inset-0 opacity-20"
         style={{
           backgroundImage: `
@@ -66,7 +66,7 @@ const Hero = () => {
             transition={{ delay: 0.3, duration: 0.8 }}
             className="mb-8"
           >
-            <p 
+            <p
               className="text-2xl md:text-3xl lg:text-4xl font-semibold bg-gradient-to-r from-cyan-400 via-pink-500 to-cyan-400 bg-clip-text text-transparent inline-block"
               style={{
                 backgroundSize: "200% auto",
@@ -75,7 +75,7 @@ const Hero = () => {
             >
               Full Stack Developer | Web Developer
             </p>
-            <div 
+            <div
               className="h-1 w-64 mx-auto mt-4 rounded-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent"
               style={{
                 boxShadow: "0 0 10px #00ff88, 0 0 20px #00ff88",
@@ -91,7 +91,7 @@ const Hero = () => {
             transition={{ delay: 0.6, duration: 0.8 }}
             className="text-gray-300 text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
           >
-            Desenvolvedor apaixonado, focado em criar soluções web inovadoras com tecnologias modernas.
+            Passionate developer focused on creating innovative web solutions with modern technologies
           </motion.p>
 
           {/* CTA Button */}

@@ -33,7 +33,7 @@ const ProjectCard = ({ project }) => {
           <h3 className="text-2xl font-bold text-white mb-2 hover:text-cyan-400 transition-colors">
             {name}
           </h3>
-          
+
           <p className="text-gray-300 leading-relaxed min-h-[60px]">
             {description || "No description available"}
           </p>
@@ -68,12 +68,12 @@ const ProjectCard = ({ project }) => {
               <span>{language}</span>
             </div>
           )}
-          
+
           <div className="flex items-center gap-1">
             <Star size={14} className="text-yellow-400" />
             <span>{stargazers_count}</span>
           </div>
-          
+
           <div className="flex items-center gap-1">
             <GitFork size={14} className="text-gray-400" />
             <span>{forks_count}</span>
@@ -98,7 +98,7 @@ const ProjectCard = ({ project }) => {
               <span>GitHub</span>
             </a>
           </Button>
-          
+
           {homepage && (
             <Button
               asChild
@@ -141,7 +141,7 @@ const getLanguageColor = (language) => {
     Ruby: "#701516",
     Swift: "#ffac45",
   };
-  
+
   return colors[language] || "#8b949e";
 };
 

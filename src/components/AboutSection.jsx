@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { NeonText, NeonBox } from "@/components/NeonGlow";
 import { Github, MapPin, Link as LinkIcon } from "lucide-react";
 import { motion } from "framer-motion";
-import { fetchGitHubUser } from "@/lib/githubApi";
 
 const AboutSection = () => {
   const [userData, setUserData] = useState(null);
@@ -11,7 +10,8 @@ const AboutSection = () => {
   useEffect(() => {
     const fetchGitHubData = async () => {
       try {
-        const data = await fetchGitHubUser("kaikybrofc");
+        const response = await fetch("https://api.github.com/users/kaikybrofc");
+        const data = await response.json();
         setUserData(data);
       } catch (error) {
         console.error("Error fetching GitHub data:", error);
@@ -64,7 +64,7 @@ const AboutSection = () => {
                 Sobre Mim
               </NeonText>
             </h2>
-            <div 
+            <div
               className="h-1 w-32 mx-auto rounded-full bg-gradient-to-r from-cyan-400 to-pink-500"
               style={{ boxShadow: "0 0 10px #00ff88" }}
             ></div>
@@ -90,11 +90,11 @@ const AboutSection = () => {
                         />
                       </div>
                     )}
-                    
+
                     <h3 className="text-3xl font-bold text-white mb-2">
                       {userData?.name || "Kaiky Brito"}
                     </h3>
-                    
+
                     <p className="text-cyan-400 text-lg mb-4">
                       @{userData?.login || "kaikybrofc"}
                     </p>
@@ -112,11 +112,11 @@ const AboutSection = () => {
                           <span>{userData.location}</span>
                         </div>
                       )}
-                      
+
                       {userData?.blog && (
                         <div className="flex items-center justify-center gap-2 text-gray-300">
                           <LinkIcon size={18} className="text-cyan-400" />
-                          <a 
+                          <a
                             href={userData.blog.startsWith('http') ? userData.blog : `https://${userData.blog}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -129,7 +129,7 @@ const AboutSection = () => {
 
                       <div className="flex items-center justify-center gap-2 text-gray-300">
                         <Github size={18} className="text-cyan-400" />
-                        <a 
+                        <a
                           href={userData?.html_url}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -149,52 +149,46 @@ const AboutSection = () => {
                   <h3 className="text-2xl font-bold text-white mb-6">
                     <NeonText color="magenta">Profissional</NeonText>
                   </h3>
-                  
+
                   <div className="space-y-4 text-gray-300 leading-relaxed">
                     <p>
-                      Eu sou o <strong>Kaiky Brito</strong>, um desenvolvedor Full Stack apaixonado por criar soluções web inovadoras 
-                      e eficientes. Com experiência em tecnologias modernas, busco sempre 
+                      Eu sou o <strong>Kaiky Brito</strong>, um desenvolvedor Full Stack apaixonado por criar soluções web inovadoras
+                      e eficientes. Com experiência em tecnologias modernas, busco sempre
                       entregar projetos de alta qualidade que superem as expectativas.
                     </p>
-                    
+
                     <p>
-                      Especializado em desenvolvimento frontend e backend, trabalho com as 
-                      melhores práticas de código limpo, arquitetura escalável e design 
+                      Especializado em desenvolvimento frontend e backend, trabalho com as
+                      melhores práticas de código limpo, arquitetura escalável e design
                       responsivo para criar experiências digitais excepcionais.
                     </p>
-                    
+
                     <p>
-                      Constantemente aprendendo e me adaptando às novas tecnologias do 
-                      mercado, colaboro em projetos desafiadores que impulsionam a inovação 
+                      Constantemente aprendendo e me adaptando às novas tecnologias do
+                      mercado, colaboro em projetos desafiadores que impulsionam a inovação
                       e transformação digital.
                     </p>
 
-                    <div className="mt-8 grid grid-cols-3 gap-2 sm:gap-4 text-center">
-                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-cyan-400/30">
-                        <p className="text-2xl sm:text-3xl font-bold text-cyan-400">
+                    <div className="mt-8 grid grid-cols-3 gap-4 text-center">
+                      <div className="p-4 bg-gray-700/50 rounded-lg border border-cyan-400/30">
+                        <p className="text-3xl font-bold text-cyan-400">
                           {userData?.public_repos || 0}
                         </p>
-                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
-                          Repositórios
-                        </p>
+                        <p className="text-sm text-gray-400 mt-1">Repositórios</p>
                       </div>
-                      
-                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-pink-500/30">
-                        <p className="text-2xl sm:text-3xl font-bold text-pink-500">
+
+                      <div className="p-4 bg-gray-700/50 rounded-lg border border-pink-500/30">
+                        <p className="text-3xl font-bold text-pink-500">
                           {userData?.followers || 0}
                         </p>
-                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
-                          Seguidores
-                        </p>
+                        <p className="text-sm text-gray-400 mt-1">Seguidores</p>
                       </div>
-                      
-                      <div className="min-w-0 p-3 sm:p-4 bg-gray-700/50 rounded-lg border border-cyan-300/30">
-                        <p className="text-2xl sm:text-3xl font-bold text-cyan-300">
+
+                      <div className="p-4 bg-gray-700/50 rounded-lg border border-cyan-300/30">
+                        <p className="text-3xl font-bold text-cyan-300">
                           {userData?.following || 0}
                         </p>
-                        <p className="mt-1 text-[11px] sm:text-sm text-gray-400 leading-tight break-words">
-                          Seguindo
-                        </p>
+                        <p className="text-sm text-gray-400 mt-1">Seguindo</p>
                       </div>
                     </div>
                   </div>
