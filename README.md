@@ -84,15 +84,20 @@ Variaveis opcionais:
 - `OMNIZAP_WS_HEARTBEAT_MS` (heartbeat backend WS; padrao `30000`)
 - `OMNIZAP_WS_MAX_MESSAGE_BYTES` (limite de payload WS; padrao `1048576`)
 - `OMNIZAP_MEDIA_PROXY_PATH` (rota para servir stickers remotos via WS; padrao `/api/omnizap/media`)
+- `OMNIZAP_QUERY_PROXY_PATH` (rota para consultar JSON remoto via WS; padrao `/api/omnizap/query`)
 - `OMNIZAP_MEDIA_REQUEST_TIMEOUT_MS` (timeout para buscar midia no cliente; padrao `15000`)
 - `OMNIZAP_MEDIA_CACHE_TTL_MS` (cache de midia no backend; padrao `600000`)
 - `OMNIZAP_MEDIA_MAX_BYTES` (limite de arquivo de midia; padrao `524288`)
+- `OMNIZAP_QUERY_REQUEST_TIMEOUT_MS` (timeout da consulta JSON no cliente; padrao `15000`)
+- `OMNIZAP_QUERY_CACHE_TTL_MS` (cache JSON no backend; padrao `60000`)
+- `OMNIZAP_QUERY_MAX_RESPONSE_BYTES` (limite de resposta JSON no proxy; padrao `921600`)
 - `OMNIZAP_WS_URL` (URL `ws://`/`wss://` usada pelo bridge local)
 - `OMNIZAP_CLIENT_ID` (id fixo do cliente local; recomendado em producao)
 - `OMNIZAP_WS_SYNC_INTERVAL_MS` (sync periodico do bridge; padrao `60000`)
 - `OMNIZAP_WS_HEARTBEAT_INTERVAL_MS` (heartbeat do bridge; padrao `25000`)
 - `OMNIZAP_WS_RECONNECT_MAX_MS` (backoff maximo do bridge; padrao `30000`)
 - `OMNIZAP_WS_MEDIA_MAX_BYTES` (limite de envio de midia no bridge; padrao `524288`)
+- `OMNIZAP_WS_JSON_MAX_BYTES` (limite de envio JSON no bridge; padrao `921600`)
 
 ## Deploy estatico e CSP
 
@@ -147,6 +152,7 @@ Endpoints:
 - `GET OMNIZAP_WS_PATH` (health rapido do canal WS; resposta `status: "ready"`)
 - `GET /api/omnizap/ws/status` (status de conexoes e fila pendente)
 - `GET OMNIZAP_MEDIA_PROXY_PATH?client_id=...&relative_path=...` (serve arquivo remoto via cliente WS)
+- `GET OMNIZAP_QUERY_PROXY_PATH?client_id=...&endpoint=...` (consulta JSON remoto via cliente WS)
 - `GET /api/health` (health geral, inclui metrica do canal OmniZap)
 
 Tokens aceitos no HTTP:
@@ -199,6 +205,18 @@ Ou para recurso de endpoint local (ex.: `cover_url`):
 
 ```text
 /api/omnizap/media?client_id=omnizap-local-1&resource_url=/api/sticker-packs/pack-key/stickers/id.webp
+```
+
+Consulta JSON remota paginada:
+
+```text
+/api/omnizap/query?client_id=omnizap-local-1&endpoint=/api/sticker-packs/data-files?limit=50&offset=0
+```
+
+Rota de visualizacao dos stickers no frontend:
+
+```text
+/projetos/omnizap-system/stickers
 ```
 
 ## Anti-spam em formularios

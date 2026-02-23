@@ -63,6 +63,9 @@ const OMNIZAP_WS_PATH = normalizeWebhookPath(
 const OMNIZAP_MEDIA_PROXY_PATH = normalizeWebhookPath(
   process.env.OMNIZAP_MEDIA_PROXY_PATH || "/api/omnizap/media"
 );
+const OMNIZAP_QUERY_PROXY_PATH = normalizeWebhookPath(
+  process.env.OMNIZAP_QUERY_PROXY_PATH || "/api/omnizap/query"
+);
 const OMNIZAP_COMMANDS_PATH = normalizeWebhookPath(
   process.env.OMNIZAP_COMMANDS_PATH || "/api/omnizap/commands"
 );
@@ -82,6 +85,15 @@ const OMNIZAP_MEDIA_CACHE_TTL_MS = Number(
 );
 const OMNIZAP_MEDIA_MAX_BYTES = Number(
   process.env.OMNIZAP_MEDIA_MAX_BYTES || 512 * 1024
+);
+const OMNIZAP_QUERY_REQUEST_TIMEOUT_MS = Number(
+  process.env.OMNIZAP_QUERY_REQUEST_TIMEOUT_MS || 15 * 1000
+);
+const OMNIZAP_QUERY_CACHE_TTL_MS = Number(
+  process.env.OMNIZAP_QUERY_CACHE_TTL_MS || 60 * 1000
+);
+const OMNIZAP_QUERY_MAX_RESPONSE_BYTES = Number(
+  process.env.OMNIZAP_QUERY_MAX_RESPONSE_BYTES || 900 * 1024
 );
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -126,6 +138,14 @@ db.exec(`
     size_bytes INTEGER NOT NULL,
     fetched_at INTEGER NOT NULL,
     PRIMARY KEY (client_id, media_key)
+  );
+  CREATE TABLE IF NOT EXISTS omnizap_query_cache (
+    client_id TEXT NOT NULL,
+    query_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (client_id, query_key)
   );
 `);
 
@@ -248,6 +268,30 @@ const upsertOmnizapMediaCacheStmt = db.prepare(`
   ON CONFLICT(client_id, media_key) DO UPDATE SET
     content_type = excluded.content_type,
     payload_base64 = excluded.payload_base64,
+    size_bytes = excluded.size_bytes,
+    fetched_at = excluded.fetched_at
+`);
+
+const selectFreshOmnizapQueryCacheStmt = db.prepare(`
+  SELECT payload_json, size_bytes, fetched_at
+  FROM omnizap_query_cache
+  WHERE client_id = ?
+    AND query_key = ?
+    AND fetched_at >= ?
+  LIMIT 1
+`);
+
+const upsertOmnizapQueryCacheStmt = db.prepare(`
+  INSERT INTO omnizap_query_cache (
+    client_id,
+    query_key,
+    payload_json,
+    size_bytes,
+    fetched_at
+  )
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(client_id, query_key) DO UPDATE SET
+    payload_json = excluded.payload_json,
     size_bytes = excluded.size_bytes,
     fetched_at = excluded.fetched_at
 `);
@@ -440,6 +484,10 @@ const isOmnizapMediaProxyPath = (pathname) =>
   normalizeRequestPathname(pathname) ===
   normalizeRequestPathname(OMNIZAP_MEDIA_PROXY_PATH);
 
+const isOmnizapQueryProxyPath = (pathname) =>
+  normalizeRequestPathname(pathname) ===
+  normalizeRequestPathname(OMNIZAP_QUERY_PROXY_PATH);
+
 const normalizeRelativePath = (value) => {
   if (typeof value !== "string") {
     return "";
@@ -494,6 +542,19 @@ const normalizeResourceUrl = (value) => {
   } catch {
     return "";
   }
+};
+
+const normalizeOmnizapApiEndpoint = (value) => {
+  const normalized = normalizeResourceUrl(value);
+  if (!normalized) {
+    return "";
+  }
+
+  if (!normalized.startsWith("/api/sticker-packs")) {
+    return "";
+  }
+
+  return normalized;
 };
 
 const getWebhookTokenFromRequest = (request, requestUrl, payload) => {
@@ -673,6 +734,7 @@ const sendWsJson = (socket, payload) => {
 };
 
 const pendingMediaRequestsById = new Map();
+const pendingJsonRequestsById = new Map();
 
 const getOneOpenSocketForClient = (clientId) => {
   const sockets = wsClientsById.get(clientId);
@@ -708,6 +770,30 @@ const rejectPendingMediaRequest = (requestId, errorMessage) => {
   }
 
   pendingMediaRequestsById.delete(requestId);
+  clearTimeout(pending.timeoutId);
+  pending.reject(new Error(errorMessage));
+  return true;
+};
+
+const resolvePendingJsonRequest = (requestId, value) => {
+  const pending = pendingJsonRequestsById.get(requestId);
+  if (!pending) {
+    return false;
+  }
+
+  pendingJsonRequestsById.delete(requestId);
+  clearTimeout(pending.timeoutId);
+  pending.resolve(value);
+  return true;
+};
+
+const rejectPendingJsonRequest = (requestId, errorMessage) => {
+  const pending = pendingJsonRequestsById.get(requestId);
+  if (!pending) {
+    return false;
+  }
+
+  pendingJsonRequestsById.delete(requestId);
   clearTimeout(pending.timeoutId);
   pending.reject(new Error(errorMessage));
   return true;
@@ -791,6 +877,58 @@ const requestMediaFromWebSocketClient = async ({
     throw new Error(
       `Nao foi possivel enviar pedido de midia para '${normalizedClientId}'.`
     );
+  }
+
+  return requestPromise;
+};
+
+const requestJsonFromWebSocketClient = async ({ targetClient, endpoint }) => {
+  const normalizedClientId = normalizeTargetClient(targetClient);
+  const normalizedEndpoint = normalizeOmnizapApiEndpoint(endpoint);
+  if (!normalizedEndpoint) {
+    throw new Error("Endpoint OmniZap invalido para consulta remota.");
+  }
+
+  const socket = getOneOpenSocketForClient(normalizedClientId);
+  if (!socket) {
+    throw new Error(`Cliente OmniZap '${normalizedClientId}' nao esta conectado.`);
+  }
+
+  const requestId = randomUUID();
+  const requestPromise = new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      rejectPendingJsonRequest(
+        requestId,
+        `Tempo limite excedido aguardando JSON do cliente '${normalizedClientId}'.`
+      );
+    }, OMNIZAP_QUERY_REQUEST_TIMEOUT_MS);
+
+    pendingJsonRequestsById.set(requestId, {
+      resolve,
+      reject,
+      timeoutId,
+    });
+  });
+
+  const sent = sendWsJson(socket, {
+    type: "server_event",
+    delivery_id: 0,
+    target_client: normalizedClientId,
+    queued_at: Date.now(),
+    event: {
+      type: "fetch_json",
+      request_id: requestId,
+      endpoint: normalizedEndpoint,
+      max_bytes: OMNIZAP_QUERY_MAX_RESPONSE_BYTES,
+    },
+  });
+
+  if (!sent) {
+    rejectPendingJsonRequest(
+      requestId,
+      `Nao foi possivel enviar consulta JSON para '${normalizedClientId}'.`
+    );
+    throw new Error(`Nao foi possivel enviar consulta JSON para '${normalizedClientId}'.`);
   }
 
   return requestPromise;
@@ -915,6 +1053,7 @@ const getWsStatusSnapshot = () => {
   return {
     websocket_path: OMNIZAP_WS_PATH,
     media_proxy_path: OMNIZAP_MEDIA_PROXY_PATH,
+    query_proxy_path: OMNIZAP_QUERY_PROXY_PATH,
     connected_clients: clients,
     total_connections: clients.reduce(
       (acc, entry) => acc + Number(entry.connections || 0),
@@ -923,6 +1062,7 @@ const getWsStatusSnapshot = () => {
     outbox_pending_total: totalPending,
     outbox_pending_by_target: pendingByTarget,
     pending_media_requests: pendingMediaRequestsById.size,
+    pending_json_requests: pendingJsonRequestsById.size,
   };
 };
 
@@ -1125,6 +1265,32 @@ const handleOmnizapWsMessage = (socket, rawData) => {
     resolvePendingMediaRequest(requestId, {
       source_client_id: socket.clientId || "unknown",
       payload: mediaPayload,
+    });
+    return;
+  }
+
+  if (messageType === "json_response") {
+    const requestId =
+      (typeof message.request_id === "string" && message.request_id.trim()) ||
+      (typeof message.requestId === "string" && message.requestId.trim()) ||
+      "";
+
+    if (!requestId) {
+      sendWsJson(socket, {
+        type: "error",
+        message: "json_response sem request_id.",
+      });
+      return;
+    }
+
+    const jsonPayload =
+      message.payload && typeof message.payload === "object" && !Array.isArray(message.payload)
+        ? message.payload
+        : message;
+
+    resolvePendingJsonRequest(requestId, {
+      source_client_id: socket.clientId || "unknown",
+      payload: jsonPayload,
     });
     return;
   }
@@ -1584,6 +1750,121 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (isOmnizapQueryProxyPath(requestPathname)) {
+    const endpointParam =
+      requestUrl.searchParams.get("endpoint") ||
+      requestUrl.searchParams.get("path") ||
+      "";
+    const normalizedEndpoint = normalizeOmnizapApiEndpoint(endpointParam);
+
+    if (!normalizedEndpoint) {
+      sendJson(response, 200, {
+        status: "ready",
+        message:
+          "Proxy JSON OmniZap ativo. Informe endpoint=/api/sticker-packs... para consulta.",
+        method: "GET",
+        query_proxy_path: OMNIZAP_QUERY_PROXY_PATH,
+        required_params: ["client_id", "endpoint"],
+      });
+      return;
+    }
+
+    if (!OMNIZAP_WS_TOKEN) {
+      sendJson(response, 503, {
+        error: "Proxy JSON indisponivel. OMNIZAP_WS_TOKEN nao configurado.",
+      });
+      return;
+    }
+
+    const targetClient = normalizeTargetClient(
+      requestUrl.searchParams.get("client_id") ||
+        requestUrl.searchParams.get("target_client"),
+      OMNIZAP_DEFAULT_TARGET_CLIENT
+    );
+    const now = Date.now();
+    const cachedJsonRow = selectFreshOmnizapQueryCacheStmt.get(
+      targetClient,
+      normalizedEndpoint,
+      now - OMNIZAP_QUERY_CACHE_TTL_MS
+    );
+
+    if (cachedJsonRow?.payload_json) {
+      const cachedPayload = parseJsonSafe(cachedJsonRow.payload_json, null);
+      if (cachedPayload !== null) {
+        sendJson(response, 200, cachedPayload, {
+          "X-Omnizap-Query-Source": "cache",
+          "X-Omnizap-Query-Client": targetClient,
+        });
+        return;
+      }
+    }
+
+    let jsonResult = null;
+    try {
+      jsonResult = await requestJsonFromWebSocketClient({
+        targetClient,
+        endpoint: normalizedEndpoint,
+      });
+    } catch (queryError) {
+      sendJson(response, 503, {
+        error: "Falha ao requisitar JSON para o cliente OmniZap.",
+        details: String(queryError?.message || queryError),
+        target_client: targetClient,
+      });
+      return;
+    }
+
+    const jsonPayload =
+      jsonResult?.payload &&
+      typeof jsonResult.payload === "object" &&
+      !Array.isArray(jsonResult.payload)
+        ? jsonResult.payload
+        : {};
+
+    if (jsonPayload.ok === false) {
+      sendJson(response, 502, {
+        error: "Cliente OmniZap retornou erro ao buscar JSON.",
+        details: jsonPayload.error || "Erro desconhecido.",
+        target_client: targetClient,
+        endpoint: normalizedEndpoint,
+      });
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(jsonPayload, "data")) {
+      sendJson(response, 502, {
+        error: "Cliente OmniZap nao retornou payload JSON esperado.",
+        target_client: targetClient,
+        endpoint: normalizedEndpoint,
+      });
+      return;
+    }
+
+    const responsePayload = jsonPayload.data;
+    const responsePayloadJson = JSON.stringify(responsePayload);
+    if (Buffer.byteLength(responsePayloadJson, "utf8") > OMNIZAP_QUERY_MAX_RESPONSE_BYTES) {
+      sendJson(response, 413, {
+        error: "Payload JSON excede limite permitido para o proxy.",
+        max_bytes: OMNIZAP_QUERY_MAX_RESPONSE_BYTES,
+      });
+      return;
+    }
+
+    upsertOmnizapQueryCacheStmt.run(
+      targetClient,
+      normalizedEndpoint,
+      responsePayloadJson,
+      Buffer.byteLength(responsePayloadJson, "utf8"),
+      now
+    );
+
+    sendJson(response, 200, responsePayload, {
+      "X-Omnizap-Query-Source": "ws",
+      "X-Omnizap-Query-Client": targetClient,
+    });
+    return;
+  }
+
   if (requestPathname === "/api/health") {
     const wsStatus = getWsStatusSnapshot();
     sendJson(response, 200, {
@@ -1596,11 +1877,14 @@ const server = createServer(async (request, response) => {
       omnizap_commands_path: OMNIZAP_COMMANDS_PATH,
       omnizap_ws_path: OMNIZAP_WS_PATH,
       omnizap_media_proxy_path: OMNIZAP_MEDIA_PROXY_PATH,
+      omnizap_query_proxy_path: OMNIZAP_QUERY_PROXY_PATH,
       omnizap_ws_enabled: Boolean(OMNIZAP_WS_TOKEN),
       omnizap_ws_connected_clients: wsStatus.connected_clients,
       omnizap_ws_outbox_pending_total: wsStatus.outbox_pending_total,
       omnizap_media_cache_ttl_ms: OMNIZAP_MEDIA_CACHE_TTL_MS,
       omnizap_media_max_bytes: OMNIZAP_MEDIA_MAX_BYTES,
+      omnizap_query_cache_ttl_ms: OMNIZAP_QUERY_CACHE_TTL_MS,
+      omnizap_query_max_response_bytes: OMNIZAP_QUERY_MAX_RESPONSE_BYTES,
     });
     return;
   }
@@ -1714,6 +1998,7 @@ server.listen(PORT, () => {
   console.log(`[github-cache] OmniZap commands path ${OMNIZAP_COMMANDS_PATH}`);
   console.log(`[github-cache] OmniZap WebSocket path ${OMNIZAP_WS_PATH}`);
   console.log(`[github-cache] OmniZap media proxy path ${OMNIZAP_MEDIA_PROXY_PATH}`);
+  console.log(`[github-cache] OmniZap query proxy path ${OMNIZAP_QUERY_PROXY_PATH}`);
 });
 
 const shutdown = () => {
@@ -1724,6 +2009,12 @@ const shutdown = () => {
     clearTimeout(pendingRequest.timeoutId);
     pendingRequest.reject(new Error("Servidor encerrando."));
     pendingMediaRequestsById.delete(requestId);
+  }
+
+  for (const [requestId, pendingRequest] of pendingJsonRequestsById.entries()) {
+    clearTimeout(pendingRequest.timeoutId);
+    pendingRequest.reject(new Error("Servidor encerrando."));
+    pendingJsonRequestsById.delete(requestId);
   }
 
   server.close(() => {

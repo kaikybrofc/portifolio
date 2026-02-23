@@ -18,6 +18,9 @@ const MEDIA_PROXY_PATH = process.env.OMNIZAP_MEDIA_PROXY_PATH || "/api/omnizap/m
 const WS_MEDIA_MAX_BYTES = Number(
   process.env.OMNIZAP_WS_MEDIA_MAX_BYTES || 512 * 1024
 );
+const WS_JSON_MAX_BYTES = Number(
+  process.env.OMNIZAP_WS_JSON_MAX_BYTES || 900 * 1024
+);
 const HEARTBEAT_INTERVAL_MS = Number(
   process.env.OMNIZAP_WS_HEARTBEAT_INTERVAL_MS || 25_000
 );
@@ -91,6 +94,19 @@ const normalizeResourceUrl = (value) => {
   } catch {
     return "";
   }
+};
+
+const normalizeOmnizapApiEndpoint = (value) => {
+  const normalized = normalizeResourceUrl(value);
+  if (!normalized) {
+    return "";
+  }
+
+  if (!normalized.startsWith("/api/sticker-packs")) {
+    return "";
+  }
+
+  return normalized;
 };
 
 const encodePathSegments = (value) =>
@@ -217,6 +233,71 @@ const decorateRoutePayload = (endpointPath, payload) => {
         client_id: CLIENT_ID,
       };
     });
+  }
+
+  const parsedEndpoint = new URL(endpointPath, "http://localhost");
+  const endpointSegments = parsedEndpoint.pathname.split("/").filter(Boolean);
+  const isPackDetailEndpoint =
+    endpointSegments.length === 3 &&
+    endpointSegments[0] === "api" &&
+    endpointSegments[1] === "sticker-packs";
+
+  if (isPackDetailEndpoint) {
+    const packKey = decodeURIComponent(endpointSegments[2] || "");
+    const buildPackStickerProxyUrl = (stickerItem) => {
+      if (!stickerItem || typeof stickerItem !== "object" || Array.isArray(stickerItem)) {
+        return "";
+      }
+
+      const relativePath =
+        typeof stickerItem.relative_path === "string" ? stickerItem.relative_path : "";
+      if (relativePath) {
+        return buildMediaProxyUrl({ relativePath });
+      }
+
+      const stickerId =
+        typeof stickerItem.id === "string"
+          ? stickerItem.id
+          : typeof stickerItem.sticker_id === "string"
+            ? stickerItem.sticker_id
+            : "";
+      const resourceUrl =
+        typeof stickerItem.url === "string" && stickerItem.url.startsWith("/")
+          ? stickerItem.url
+          : stickerId
+            ? `/api/sticker-packs/${encodeURIComponent(packKey)}/stickers/${encodeURIComponent(stickerId)}.webp`
+            : "";
+
+      return buildMediaProxyUrl({ resourceUrl });
+    };
+
+    const attachProxy = (items) =>
+      Array.isArray(items)
+        ? items.map((item) => ({
+            ...item,
+            proxy_image_url:
+              (typeof item?.proxy_image_url === "string" && item.proxy_image_url) ||
+              buildPackStickerProxyUrl(item) ||
+              undefined,
+            client_id: CLIENT_ID,
+          }))
+        : items;
+
+    if (Array.isArray(clonedPayload.stickers)) {
+      clonedPayload.stickers = attachProxy(clonedPayload.stickers);
+    }
+
+    if (
+      clonedPayload.data &&
+      typeof clonedPayload.data === "object" &&
+      !Array.isArray(clonedPayload.data) &&
+      Array.isArray(clonedPayload.data.stickers)
+    ) {
+      clonedPayload.data = {
+        ...clonedPayload.data,
+        stickers: attachProxy(clonedPayload.data.stickers),
+      };
+    }
   }
 
   return clonedPayload;
@@ -403,6 +484,65 @@ const sendMediaResponse = async (event) => {
   }
 };
 
+const sendJsonResponse = async (event) => {
+  const requestId =
+    (typeof event?.request_id === "string" && event.request_id.trim()) || "";
+  const endpoint = normalizeOmnizapApiEndpoint(event?.endpoint || event?.path || "");
+
+  if (!requestId) {
+    return;
+  }
+
+  if (!endpoint) {
+    sendJson({
+      type: "json_response",
+      request_id: requestId,
+      payload: {
+        ok: false,
+        error: "endpoint invalido. Use /api/sticker-packs...",
+      },
+    });
+    return;
+  }
+
+  const maxBytesFromServer = Number(event.max_bytes || 0);
+  const maxBytes =
+    Number.isFinite(maxBytesFromServer) && maxBytesFromServer > 0
+      ? Math.min(maxBytesFromServer, WS_JSON_MAX_BYTES)
+      : WS_JSON_MAX_BYTES;
+
+  const localUrl = `${localBaseUrl}${endpoint}`;
+  try {
+    const payload = await fetchJson(localUrl);
+    const decoratedPayload = decorateRoutePayload(endpoint, payload);
+    const payloadAsJson = JSON.stringify(decoratedPayload);
+    const payloadBytes = Buffer.byteLength(payloadAsJson, "utf8");
+    if (payloadBytes > maxBytes) {
+      throw new Error(
+        `Resposta excede limite (${payloadBytes} bytes > ${maxBytes} bytes).`
+      );
+    }
+
+    sendJson({
+      type: "json_response",
+      request_id: requestId,
+      payload: {
+        ok: true,
+        data: decoratedPayload,
+      },
+    });
+  } catch (error) {
+    sendJson({
+      type: "json_response",
+      request_id: requestId,
+      payload: {
+        ok: false,
+        error: String(error?.message || error),
+      },
+    });
+  }
+};
+
 const handleServerEvent = async (message) => {
   const deliveryId = Number(message?.delivery_id || 0);
   const event = message?.event;
@@ -424,6 +564,11 @@ const handleServerEvent = async (message) => {
 
   if (eventType === "fetch_media") {
     await sendMediaResponse(event);
+    return;
+  }
+
+  if (eventType === "fetch_json") {
+    await sendJsonResponse(event);
     return;
   }
 

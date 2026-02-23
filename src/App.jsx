@@ -19,6 +19,7 @@ const BlogPostDetailPage = lazy(() => import('@/pages/BlogPostDetailPage'));
 const BlogPostEditor = lazy(() => import('@/pages/BlogPostEditor'));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 const OmnizapSystemPage = lazy(() => import('@/pages/projects/OmnizapSystemPage'));
+const OmnizapSystemStickersPage = lazy(() => import('@/pages/projects/OmnizapSystemStickersPage'));
 
 // Component to handle tracking and hash routing on mount
 const HomePage = () => {
@@ -83,6 +84,10 @@ function App() {
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:id" element={<BlogPostDetailPage />} />
               <Route path="/projetos/omnizap-system" element={<OmnizapSystemPage />} />
+              <Route
+                path="/projetos/omnizap-system/stickers"
+                element={<OmnizapSystemStickersPage />}
+              />
               <Route
                 path="/analytics"
                 element={

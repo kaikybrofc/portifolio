@@ -77,6 +77,11 @@ const MEDIA_PROXY_ENDPOINT = API_BASE_URL
   : USE_RELATIVE_API
     ? "/api/omnizap/media"
     : null;
+const QUERY_PROXY_ENDPOINT = API_BASE_URL
+  ? `${API_BASE_URL}/api/omnizap/query`
+  : USE_RELATIVE_API
+    ? "/api/omnizap/query"
+    : null;
 
 export const fetchOmnizapWebhookLatest = async () => {
   if (!WEBHOOK_LATEST_ENDPOINT) {
@@ -189,4 +194,115 @@ export const buildOmnizapMediaProxyUrl = ({
   }
 
   return `${MEDIA_PROXY_ENDPOINT}?${query.toString()}`;
+};
+
+const ensureClientId = (value) =>
+  typeof value === "string" && value.trim() ? value.trim() : "default";
+
+const fetchOmnizapRemoteEndpoint = async ({ clientId, endpoint }) => {
+  if (!QUERY_PROXY_ENDPOINT) {
+    throw new Error("Proxy JSON OmniZap indisponivel na configuracao atual.");
+  }
+
+  if (typeof endpoint !== "string" || !endpoint.trim()) {
+    throw new Error("Endpoint OmniZap remoto invalido.");
+  }
+
+  const query = new URLSearchParams();
+  query.set("client_id", ensureClientId(clientId));
+  query.set("endpoint", endpoint.trim());
+  const requestUrl = `${QUERY_PROXY_ENDPOINT}?${query.toString()}`;
+
+  const response = await fetch(requestUrl, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    let details = "";
+    try {
+      const body = await response.json();
+      details = body?.error || body?.details || "";
+    } catch {
+      details = "";
+    }
+
+    throw new Error(
+      `Falha ao consultar endpoint remoto OmniZap (${response.status})${details ? `: ${details}` : "."}`
+    );
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("Resposta do proxy JSON OmniZap nao esta em JSON.");
+  }
+
+  return response.json();
+};
+
+export const fetchOmnizapRemoteStickerPacks = async ({
+  clientId,
+  q = "",
+  visibility = "public",
+  limit = 30,
+  offset = 0,
+} = {}) => {
+  const query = new URLSearchParams();
+  query.set("q", q || "");
+  query.set("visibility", visibility || "public");
+  query.set("limit", String(Math.max(1, Number(limit || 30))));
+  query.set("offset", String(Math.max(0, Number(offset || 0))));
+
+  return fetchOmnizapRemoteEndpoint({
+    clientId,
+    endpoint: `/api/sticker-packs?${query.toString()}`,
+  });
+};
+
+export const fetchOmnizapRemoteOrphanStickers = async ({
+  clientId,
+  q = "",
+  limit = 30,
+  offset = 0,
+} = {}) => {
+  const query = new URLSearchParams();
+  query.set("q", q || "");
+  query.set("limit", String(Math.max(1, Number(limit || 30))));
+  query.set("offset", String(Math.max(0, Number(offset || 0))));
+
+  return fetchOmnizapRemoteEndpoint({
+    clientId,
+    endpoint: `/api/sticker-packs/orphan-stickers?${query.toString()}`,
+  });
+};
+
+export const fetchOmnizapRemoteDataFiles = async ({
+  clientId,
+  q = "",
+  limit = 30,
+  offset = 0,
+} = {}) => {
+  const query = new URLSearchParams();
+  query.set("q", q || "");
+  query.set("limit", String(Math.max(1, Number(limit || 30))));
+  query.set("offset", String(Math.max(0, Number(offset || 0))));
+
+  return fetchOmnizapRemoteEndpoint({
+    clientId,
+    endpoint: `/api/sticker-packs/data-files?${query.toString()}`,
+  });
+};
+
+export const fetchOmnizapRemotePackByKey = async ({ clientId, packKey } = {}) => {
+  const normalizedPackKey =
+    typeof packKey === "string" && packKey.trim() ? packKey.trim() : "";
+  if (!normalizedPackKey) {
+    throw new Error("packKey obrigatorio.");
+  }
+
+  return fetchOmnizapRemoteEndpoint({
+    clientId,
+    endpoint: `/api/sticker-packs/${encodeURIComponent(normalizedPackKey)}`,
+  });
 };

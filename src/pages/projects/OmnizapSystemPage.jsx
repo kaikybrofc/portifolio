@@ -480,16 +480,28 @@ const OmniZapSystemPage = () => {
 
       <div className="container mx-auto px-4 relative z-10">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-          <Button
-            asChild
-            variant="outline"
-            className="border-cyan-400/60 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900"
-          >
-            <Link to="/">
-              <ArrowLeft size={16} className="mr-2" />
-              Voltar ao portfolio
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              asChild
+              variant="outline"
+              className="border-cyan-400/60 text-cyan-400 hover:bg-cyan-400 hover:text-gray-900"
+            >
+              <Link to="/">
+                <ArrowLeft size={16} className="mr-2" />
+                Voltar ao portfolio
+              </Link>
+            </Button>
+
+            <Button
+              asChild
+              variant="outline"
+              className="border-cyan-300/60 text-cyan-300 hover:bg-cyan-300 hover:text-gray-900"
+            >
+              <Link to="/projetos/omnizap-system/stickers">
+                Ver rota de stickers
+              </Link>
+            </Button>
+          </div>
 
           <Button
             variant="outline"
