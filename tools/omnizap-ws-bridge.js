@@ -255,12 +255,22 @@ const decorateRoutePayload = (endpointPath, payload) => {
         return buildMediaProxyUrl({ relativePath });
       }
 
+      const assetUrl =
+        typeof stickerItem.asset_url === "string" && stickerItem.asset_url.startsWith("/")
+          ? stickerItem.asset_url
+          : "";
+      if (assetUrl) {
+        return buildMediaProxyUrl({ resourceUrl: assetUrl });
+      }
+
       const stickerId =
-        typeof stickerItem.id === "string"
-          ? stickerItem.id
-          : typeof stickerItem.sticker_id === "string"
-            ? stickerItem.sticker_id
-            : "";
+        typeof stickerItem.sticker_id === "string" && stickerItem.sticker_id.trim()
+          ? stickerItem.sticker_id
+          : typeof stickerItem?.asset?.id === "string" && stickerItem.asset.id.trim()
+            ? stickerItem.asset.id
+            : typeof stickerItem.id === "string" && stickerItem.id.trim()
+              ? stickerItem.id
+              : "";
       const resourceUrl =
         typeof stickerItem.url === "string" && stickerItem.url.startsWith("/")
           ? stickerItem.url

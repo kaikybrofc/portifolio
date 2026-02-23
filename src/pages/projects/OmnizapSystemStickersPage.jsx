@@ -159,6 +159,13 @@ const resolvePackStickerImageUrl = (sticker, packKey, clientId) => {
     });
   }
 
+  if (typeof sticker.asset_url === "string" && sticker.asset_url.startsWith("/")) {
+    return buildOmnizapMediaProxyUrl({
+      clientId,
+      resourceUrl: sticker.asset_url,
+    });
+  }
+
   if (typeof sticker.url === "string" && sticker.url.startsWith("/")) {
     return buildOmnizapMediaProxyUrl({
       clientId,
@@ -167,11 +174,13 @@ const resolvePackStickerImageUrl = (sticker, packKey, clientId) => {
   }
 
   const stickerId =
-    typeof sticker.id === "string"
-      ? sticker.id
-      : typeof sticker.sticker_id === "string"
-        ? sticker.sticker_id
-        : "";
+    typeof sticker.sticker_id === "string" && sticker.sticker_id.trim()
+      ? sticker.sticker_id
+      : typeof sticker?.asset?.id === "string" && sticker.asset.id.trim()
+        ? sticker.asset.id
+        : typeof sticker.id === "string" && sticker.id.trim()
+          ? sticker.id
+          : "";
 
   if (!stickerId || !packKey) {
     return "";
