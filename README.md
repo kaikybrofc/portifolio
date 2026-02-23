@@ -55,7 +55,8 @@ Variaveis opcionais:
 - `GITHUB_CACHE_DB_PATH` (caminho do arquivo `.sqlite`)
 - `GITHUB_TOKEN` (token opcional para aumentar limite da API do GitHub)
 - `VITE_SUPABASE_URL` (obrigatoria para login GitHub via Supabase)
-- `VITE_SUPABASE_ANON_KEY` (obrigatoria para login GitHub via Supabase)
+- `VITE_SUPABASE_ANON_KEY` ou `VITE_SUPABASE_PUBLISHABLE_KEY` (obrigatoria para login GitHub via Supabase)
+- `VITE_SUPABASE_AUTH_REDIRECT_URL` (opcional: forca callback OAuth para um dominio fixo)
 - `VITE_API_BASE_URL` (URL base da API para o frontend; util em deploy com frontend/API separados)
 - `VITE_USE_RELATIVE_API` (padrao: `true`)
 - `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`; em producao publica fica desabilitado para evitar CSP)
@@ -76,10 +77,12 @@ Importante: nao use `VITE_API_BASE_URL=http://localhost:8787` em build de produc
 `localhost` so funciona na sua maquina e sera bloqueado em navegadores dos visitantes.
 Use esse valor apenas em `.env.development`.
 
-Para OAuth com Supabase em producao (VPS), configure `VITE_SUPABASE_URL` e
-`VITE_SUPABASE_ANON_KEY` (ou `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-antes de rodar `npm run build`. Em projetos Vite, variaveis publicas sao injetadas no build,
-entao alterar o `.env` apos o build nao atualiza o `dist/`.
+Para OAuth com Supabase em producao (VPS), configure `VITE_SUPABASE_URL` e uma chave publica
+(`VITE_SUPABASE_ANON_KEY` ou `VITE_SUPABASE_PUBLISHABLE_KEY`; tambem aceitamos variantes
+`NEXT_PUBLIC_*`) antes de rodar `npm run build`. Se quiser evitar retorno para dominios de preview,
+defina `VITE_SUPABASE_AUTH_REDIRECT_URL=https://seu-dominio.com`.
+Em projetos Vite, variaveis publicas sao injetadas no build, entao alterar o `.env` apos o build
+nao atualiza o `dist/`.
 
 ## Visitas da pagina (SQLite)
 

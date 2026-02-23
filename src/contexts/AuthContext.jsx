@@ -4,6 +4,10 @@ import { useToast } from '@/components/ui/use-toast';
 
 const AuthContext = createContext(undefined);
 
+const oauthRedirectTo =
+  import.meta.env.VITE_SUPABASE_AUTH_REDIRECT_URL ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_AUTH_REDIRECT_URL;
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,7 +54,7 @@ export const AuthProvider = ({ children }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: oauthRedirectTo || window.location.origin
         }
       });
       if (error) throw error;
