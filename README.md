@@ -35,6 +35,7 @@ API cache local: `http://localhost:8787`
 - `npm run dev`: inicia frontend + API de cache em paralelo
 - `npm run dev:web`: inicia apenas o frontend (Vite)
 - `npm run dev:api`: inicia apenas a API de cache (SQLite)
+- `npm run webhook:omnizap:push`: coleta rotas do OmniZap local e envia para o webhook secreto
 - `npm run build`: gera `sitemap.xml` + `rss.xml` e depois build de producao em `dist/`
 - `npm run preview`: serve o build localmente
 - `npm run lint`: executa lint sem warnings
@@ -71,6 +72,9 @@ Variaveis opcionais:
 - `VITE_SITE_URL` (URL canônica usada na geracao de `sitemap.xml` e `rss.xml`; padrao `https://omnizap.shop`)
 - `VITE_LINKEDIN_URL` (URL do LinkedIn exibida em contato/footer)
 - `VITE_CONTACT_EMAIL` (email exibido em contato/footer)
+- `OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao; padrao `/api/webhooks/omnizap-ingest`)
+- `OMNIZAP_WEBHOOK_TOKEN` (token obrigatorio para aceitar POST do webhook)
+- `OMNIZAP_WEBHOOK_MAX_BODY_BYTES` (limite de payload; padrao `1048576`)
 
 ## Deploy estatico e CSP
 
@@ -107,6 +111,44 @@ Dashboard:
 
 - `/analytics` (rota protegida: visivel apenas para o owner autenticado)
 - `/projetos/omnizap-system` (pagina dedicada com detalhes avancados do projeto OmniZap System)
+
+## Webhook OmniZap (localhost -> site)
+
+Para enviar dados do seu OmniZap local para o portfolio hospedado, use:
+
+- `POST OMNIZAP_WEBHOOK_PATH` (rota secreta de ingestao, protegida por token)
+- `GET /api/omnizap/webhook/latest` (ultimo payload recebido, usado pela pagina `/projetos/omnizap-system`)
+
+Headers aceitos para autenticacao no POST:
+
+- `Authorization: Bearer <OMNIZAP_WEBHOOK_TOKEN>`
+- ou `x-webhook-token: <OMNIZAP_WEBHOOK_TOKEN>`
+
+Exemplo com `curl`:
+
+```bash
+curl -X POST "https://seu-dominio.com/api/webhooks/omnizap-ingest" \
+  -H "Authorization: Bearer SEU_TOKEN_FORTE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "omnizap-local",
+    "route_data": {
+      "GET /api/sticker-packs": {"count": 12},
+      "GET /api/sticker-packs/orphan-stickers": {"count": 34},
+      "GET /api/sticker-packs/data-files": {"count": 128}
+    }
+  }'
+```
+
+Envio automatizado a partir do OmniZap local:
+
+```bash
+# No projeto do portfolio, com OmniZap rodando localmente
+OMNIZAP_LOCAL_BASE_URL=http://localhost:3000 \
+OMNIZAP_WEBHOOK_URL=https://seu-dominio.com/api/webhooks/omnizap-ingest \
+OMNIZAP_WEBHOOK_TOKEN=SEU_TOKEN_FORTE \
+npm run webhook:omnizap:push
+```
 
 ## Anti-spam em formularios
 

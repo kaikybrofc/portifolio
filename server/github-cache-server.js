@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 const envFilePath = join(process.cwd(), ".env");
@@ -18,6 +19,26 @@ const DB_PATH =
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 const USER_AGENT = process.env.GITHUB_USER_AGENT || "kaiky-portfolio-cache";
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
+const normalizeWebhookPath = (value) => {
+  if (typeof value !== "string") {
+    return "/api/webhooks/omnizap-ingest";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "/api/webhooks/omnizap-ingest";
+  }
+
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+};
+
+const OMNIZAP_WEBHOOK_PATH = normalizeWebhookPath(
+  process.env.OMNIZAP_WEBHOOK_PATH || "/api/webhooks/omnizap-ingest"
+);
+const OMNIZAP_WEBHOOK_TOKEN = process.env.OMNIZAP_WEBHOOK_TOKEN || "";
+const OMNIZAP_WEBHOOK_MAX_BODY_BYTES = Number(
+  process.env.OMNIZAP_WEBHOOK_MAX_BODY_BYTES || 1024 * 1024
+);
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
@@ -38,6 +59,12 @@ db.exec(`
     user_agent TEXT,
     ip TEXT,
     visited_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS omnizap_webhook_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT,
+    payload TEXT NOT NULL,
+    received_at INTEGER NOT NULL
   );
 `);
 
@@ -94,6 +121,18 @@ const selectTopPathsStmt = db.prepare(`
   GROUP BY path
   ORDER BY visits DESC
   LIMIT 10
+`);
+
+const insertOmnizapWebhookEventStmt = db.prepare(`
+  INSERT INTO omnizap_webhook_events (source, payload, received_at)
+  VALUES (?, ?, ?)
+`);
+
+const selectLatestOmnizapWebhookEventStmt = db.prepare(`
+  SELECT id, source, payload, received_at
+  FROM omnizap_webhook_events
+  ORDER BY received_at DESC, id DESC
+  LIMIT 1
 `);
 
 const getGithubUrlFromRequest = (requestUrl) => {
@@ -203,7 +242,10 @@ const getGithubUrlFromRequest = (requestUrl) => {
 const withCors = (response) => {
   response.setHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Webhook-Token, X-Omnizap-Source"
+  );
 };
 
 const sendJson = (response, statusCode, payload, headers = {}) => {
@@ -217,10 +259,18 @@ const sendJson = (response, statusCode, payload, headers = {}) => {
 
 const parseCachedPayload = (cachedRow) => JSON.parse(cachedRow.payload);
 
-const readJsonBody = async (request) => {
+const BODY_TOO_LARGE = Symbol("BODY_TOO_LARGE");
+
+const readJsonBody = async (request, options = {}) => {
+  const maxBytes = Number(options.maxBytes || 1024 * 1024);
   const chunks = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
+    totalBytes += chunk.length;
+    if (totalBytes > maxBytes) {
+      return BODY_TOO_LARGE;
+    }
     chunks.push(chunk);
   }
 
@@ -235,6 +285,51 @@ const readJsonBody = async (request) => {
   } catch {
     return null;
   }
+};
+
+const getWebhookTokenFromRequest = (request) => {
+  const authorizationHeader = request.headers.authorization;
+  if (
+    typeof authorizationHeader === "string" &&
+    authorizationHeader.startsWith("Bearer ")
+  ) {
+    return authorizationHeader.slice("Bearer ".length).trim();
+  }
+
+  const webhookTokenHeader = request.headers["x-webhook-token"];
+  if (typeof webhookTokenHeader === "string") {
+    return webhookTokenHeader.trim();
+  }
+
+  return "";
+};
+
+const secureCompareToken = (providedToken, expectedToken) => {
+  if (!providedToken || !expectedToken) {
+    return false;
+  }
+
+  const providedBuffer = Buffer.from(providedToken, "utf8");
+  const expectedBuffer = Buffer.from(expectedToken, "utf8");
+
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+};
+
+const parseWebhookSource = (request, payload) => {
+  if (typeof payload?.source === "string" && payload.source.trim()) {
+    return payload.source.trim().slice(0, 255);
+  }
+
+  const sourceHeader = request.headers["x-omnizap-source"];
+  if (typeof sourceHeader === "string" && sourceHeader.trim()) {
+    return sourceHeader.trim().slice(0, 255);
+  }
+
+  return "omnizap-local";
 };
 
 const getClientIp = (request) => {
@@ -382,8 +477,64 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && requestUrl.pathname === OMNIZAP_WEBHOOK_PATH) {
+    if (!OMNIZAP_WEBHOOK_TOKEN) {
+      sendJson(response, 503, {
+        error: "Webhook indisponivel. OMNIZAP_WEBHOOK_TOKEN nao configurado.",
+      });
+      return;
+    }
+
+    const providedToken = getWebhookTokenFromRequest(request);
+    const isAuthorized = secureCompareToken(providedToken, OMNIZAP_WEBHOOK_TOKEN);
+
+    if (!isAuthorized) {
+      sendJson(response, 401, { error: "Token de webhook invalido." });
+      return;
+    }
+
+    const body = await readJsonBody(request, {
+      maxBytes: OMNIZAP_WEBHOOK_MAX_BODY_BYTES,
+    });
+
+    if (body === BODY_TOO_LARGE) {
+      sendJson(response, 413, {
+        error: "Payload excede limite permitido para o webhook.",
+      });
+      return;
+    }
+
+    if (body == null || typeof body !== "object" || Array.isArray(body)) {
+      sendJson(response, 400, { error: "Payload JSON invalido para webhook." });
+      return;
+    }
+
+    const receivedAt = Date.now();
+    const source = parseWebhookSource(request, body);
+    const payloadAsJson = JSON.stringify(body);
+
+    const result = insertOmnizapWebhookEventStmt.run(
+      source,
+      payloadAsJson,
+      receivedAt
+    );
+
+    sendJson(response, 202, {
+      ok: true,
+      id: Number(result?.lastInsertRowid || 0),
+      source,
+      received_at: receivedAt,
+    });
+    return;
+  }
+
   if (request.method === "POST" && requestUrl.pathname === "/api/visits") {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody(request, { maxBytes: 64 * 1024 });
+
+    if (body === BODY_TOO_LARGE) {
+      sendJson(response, 413, { error: "Payload de visita excede limite." });
+      return;
+    }
 
     if (body == null) {
       sendJson(response, 400, { error: "JSON invalido." });
@@ -425,6 +576,7 @@ const server = createServer(async (request, response) => {
       status: "ok",
       cache_ttl_ms: CACHE_TTL_MS,
       db_path: DB_PATH,
+      omnizap_webhook_enabled: Boolean(OMNIZAP_WEBHOOK_TOKEN),
     });
     return;
   }
@@ -453,6 +605,32 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/omnizap/webhook/latest") {
+    const latestEvent = selectLatestOmnizapWebhookEventStmt.get();
+
+    if (!latestEvent) {
+      sendJson(response, 404, {
+        error: "Nenhum payload do webhook OmniZap foi recebido ainda.",
+      });
+      return;
+    }
+
+    let payload = {};
+    try {
+      payload = JSON.parse(latestEvent.payload);
+    } catch {
+      payload = {};
+    }
+
+    sendJson(response, 200, {
+      id: Number(latestEvent.id || 0),
+      source: latestEvent.source || "omnizap-local",
+      received_at: Number(latestEvent.received_at || 0),
+      payload,
+    });
+    return;
+  }
+
   const githubUrl = getGithubUrlFromRequest(requestUrl);
 
   if (!githubUrl) {
@@ -469,6 +647,9 @@ server.listen(PORT, () => {
   console.log(`[github-cache] SQLite em ${DB_PATH}`);
   console.log(`[github-cache] TTL ${CACHE_TTL_MS}ms`);
   console.log(`[github-cache] GitHub token ${GITHUB_TOKEN ? "enabled" : "disabled"}`);
+  console.log(
+    `[github-cache] OmniZap webhook ${OMNIZAP_WEBHOOK_TOKEN ? "enabled" : "disabled"}`
+  );
 });
 
 const shutdown = () => {

@@ -12,6 +12,7 @@ import {
   GitFork,
   Lock,
   RefreshCw,
+  Server,
   Star,
   Users,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import {
   fetchGitHubRepoLanguages,
   fetchGitHubRepoReadme,
 } from '@/lib/githubApi';
+import { fetchOmnizapWebhookLatest } from '@/lib/omnizapWebhookApi';
 
 const PROJECT_OWNER = 'kaikybrofc';
 const PROJECT_NAME = 'omnizap-system';
@@ -100,6 +102,61 @@ const getReadmeSummary = (readmeData, repoData) => {
   return lines[0] || stripMarkdown(text).slice(0, 320);
 };
 
+const getWebhookRoutesPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {};
+  }
+
+  if (
+    payload.route_data &&
+    typeof payload.route_data === 'object' &&
+    !Array.isArray(payload.route_data)
+  ) {
+    return payload.route_data;
+  }
+
+  if (
+    payload.routes &&
+    typeof payload.routes === 'object' &&
+    !Array.isArray(payload.routes)
+  ) {
+    return payload.routes;
+  }
+
+  return payload;
+};
+
+const extractRouteItemCount = (value) => {
+  if (value == null) return null;
+  if (Array.isArray(value)) return value.length;
+  if (typeof value !== 'object') return null;
+
+  const numericKeys = ['total', 'count', 'total_count', 'items_count'];
+  for (const key of numericKeys) {
+    if (typeof value[key] === 'number') {
+      return Number(value[key]);
+    }
+  }
+
+  const arrayKeys = [
+    'items',
+    'data',
+    'results',
+    'rows',
+    'packs',
+    'sticker_packs',
+    'stickers',
+    'files',
+  ];
+  for (const key of arrayKeys) {
+    if (Array.isArray(value[key])) {
+      return value[key].length;
+    }
+  }
+
+  return null;
+};
+
 const OmniZapSystemPage = () => {
   const { githubToken } = useAuth();
   const { toast } = useToast();
@@ -110,6 +167,7 @@ const OmniZapSystemPage = () => {
   const [contributors, setContributors] = useState([]);
   const [latestRelease, setLatestRelease] = useState(null);
   const [readmeSummary, setReadmeSummary] = useState('');
+  const [webhookSnapshot, setWebhookSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -137,6 +195,40 @@ const OmniZapSystemPage = () => {
       .slice(0, 8);
   }, [languages]);
 
+  const webhookSummary = useMemo(() => {
+    if (!webhookSnapshot?.payload) {
+      return null;
+    }
+
+    const routesPayload = getWebhookRoutesPayload(webhookSnapshot.payload);
+    const entries = Object.entries(routesPayload).filter(
+      ([key, value]) =>
+        typeof key === 'string' &&
+        key.trim().length > 0 &&
+        value != null &&
+        (Array.isArray(value) || typeof value === 'object')
+    );
+
+    const findByKeys = (keywords) => {
+      const entry = entries.find(([routeKey]) => {
+        const normalized = routeKey.toLowerCase();
+        return keywords.every((keyword) => normalized.includes(keyword));
+      });
+
+      return entry ? extractRouteItemCount(entry[1]) : null;
+    };
+
+    return {
+      source: webhookSnapshot.source,
+      receivedAt: webhookSnapshot.received_at,
+      routeCount: entries.length,
+      routeKeys: entries.map(([routeKey]) => routeKey).slice(0, 8),
+      stickerPacks: findByKeys(['sticker-packs']),
+      orphanStickers: findByKeys(['orphan']),
+      dataFiles: findByKeys(['data-files']),
+    };
+  }, [webhookSnapshot]);
+
   const loadProjectData = useCallback(
     async (isManualRefresh = false) => {
       setError('');
@@ -160,7 +252,7 @@ const OmniZapSystemPage = () => {
           PROJECT_NAME,
           requestOptions
         );
-        const [languagesData, commitsData, contributorsData, releaseData, readmeData] =
+        const [languagesData, commitsData, contributorsData, releaseData, readmeData, webhookData] =
           await Promise.all([
             fetchGitHubRepoLanguages(PROJECT_OWNER, PROJECT_NAME, requestOptions),
             fetchGitHubRepoCommits(
@@ -177,6 +269,10 @@ const OmniZapSystemPage = () => {
             ),
             fetchGitHubLatestRelease(PROJECT_OWNER, PROJECT_NAME, requestOptions),
             fetchGitHubRepoReadme(PROJECT_OWNER, PROJECT_NAME, requestOptions),
+            fetchOmnizapWebhookLatest().catch((webhookError) => {
+              console.warn('Nao foi possivel carregar o webhook OmniZap.', webhookError);
+              return null;
+            }),
           ]);
 
         setRepo(repoData);
@@ -192,6 +288,7 @@ const OmniZapSystemPage = () => {
         setContributors(contributorsData);
         setLatestRelease(releaseData);
         setReadmeSummary(getReadmeSummary(readmeData, repoData));
+        setWebhookSnapshot(webhookData);
       } catch (requestError) {
         console.error('Erro ao carregar dados completos do projeto:', requestError);
         const message =
@@ -414,6 +511,70 @@ const OmniZapSystemPage = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <NeonBox color="accent" className="p-6 bg-gray-900/80" hover={false}>
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <Server size={18} />
+                  Webhook OmniZap (localhost)
+                </h3>
+
+                {webhookSummary ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-300">
+                      Ultimo envio: <span className="text-cyan-300">{formatDate(webhookSummary.receivedAt)}</span>
+                    </p>
+                    <p className="text-sm text-gray-300">
+                      Origem: <span className="text-cyan-300">{webhookSummary.source || 'omnizap-local'}</span>
+                    </p>
+                    <p className="text-sm text-gray-300">
+                      Rotas recebidas: <span className="text-cyan-300">{formatCount(webhookSummary.routeCount)}</span>
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+                      <div className="rounded-lg border border-cyan-400/30 bg-gray-800/60 p-3">
+                        <p className="text-xs text-gray-400">Sticker packs</p>
+                        <p className="text-lg text-cyan-300 font-semibold">
+                          {webhookSummary.stickerPacks == null
+                            ? '-'
+                            : formatCount(webhookSummary.stickerPacks)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-cyan-400/30 bg-gray-800/60 p-3">
+                        <p className="text-xs text-gray-400">Orphan stickers</p>
+                        <p className="text-lg text-cyan-300 font-semibold">
+                          {webhookSummary.orphanStickers == null
+                            ? '-'
+                            : formatCount(webhookSummary.orphanStickers)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-cyan-400/30 bg-gray-800/60 p-3">
+                        <p className="text-xs text-gray-400">Data files</p>
+                        <p className="text-lg text-cyan-300 font-semibold">
+                          {webhookSummary.dataFiles == null
+                            ? '-'
+                            : formatCount(webhookSummary.dataFiles)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {webhookSummary.routeKeys.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {webhookSummary.routeKeys.map((routeKey) => (
+                          <span
+                            key={routeKey}
+                            className="px-2 py-1 text-xs rounded-full border border-cyan-400/40 bg-cyan-400/10 text-cyan-300"
+                          >
+                            {routeKey}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">
+                    Nenhum payload do webhook foi recebido ainda.
+                  </p>
+                )}
+              </NeonBox>
+
               <NeonBox color="cyan" className="p-6 bg-gray-900/80" hover={false}>
                 <h3 className="text-xl font-bold text-white mb-4">Linguagens</h3>
                 {languageRows.length === 0 ? (
