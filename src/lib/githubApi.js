@@ -25,13 +25,49 @@ const parseBooleanEnv = (value) => {
 };
 
 const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
+const useRelativeApiOverride = parseBooleanEnv(
+  import.meta.env.VITE_USE_RELATIVE_API
+);
+const USE_RELATIVE_API = useRelativeApiOverride ?? Boolean(import.meta.env.DEV);
 const directFallbackOverride = parseBooleanEnv(
   import.meta.env.VITE_ALLOW_DIRECT_GITHUB_FALLBACK
 );
 const ALLOW_DIRECT_GITHUB_FALLBACK =
   directFallbackOverride ?? Boolean(import.meta.env.DEV);
+const SHOULD_LOG = Boolean(import.meta.env.DEV);
 
-const buildApiUrl = (path) => `${API_BASE_URL}${path}`;
+const warnedKeys = new Set();
+
+const warnOnce = (key, message, details) => {
+  if (warnedKeys.has(key)) {
+    return;
+  }
+
+  warnedKeys.add(key);
+
+  if (!SHOULD_LOG) {
+    return;
+  }
+
+  if (details) {
+    console.warn(message, details);
+    return;
+  }
+
+  console.warn(message);
+};
+
+const buildApiUrl = (path) => {
+  if (API_BASE_URL) {
+    return `${API_BASE_URL}${path}`;
+  }
+
+  if (USE_RELATIVE_API) {
+    return path;
+  }
+
+  return null;
+};
 
 const isJsonResponse = (response) => {
   const contentType = response.headers.get("content-type") || "";
@@ -58,38 +94,73 @@ const fetchJson = async (url) => {
 };
 
 const fetchWithFallback = async (apiUrl, fallbackUrl) => {
+  if (!apiUrl) {
+    if (ALLOW_DIRECT_GITHUB_FALLBACK) {
+      return fetchJson(fallbackUrl);
+    }
+
+    warnOnce(
+      "github-api-disabled-no-base",
+      "[githubApi] No API base configured and direct GitHub fallback is disabled. Returning local fallback data."
+    );
+    return null;
+  }
+
   try {
     return await fetchJson(apiUrl);
   } catch (apiError) {
     if (!ALLOW_DIRECT_GITHUB_FALLBACK) {
-      console.warn(
-        `[githubApi] API cache unavailable for ${apiUrl}. Direct GitHub fallback disabled.`,
+      warnOnce(
+        `github-api-disabled-${apiUrl}`,
+        `[githubApi] API cache unavailable for ${apiUrl}. Direct GitHub fallback disabled. Returning local fallback data.`,
         apiError
       );
-      throw new Error(
-        `[githubApi] GitHub API cache unavailable at ${apiUrl}. Configure VITE_API_BASE_URL for a reachable backend /api endpoint or enable VITE_ALLOW_DIRECT_GITHUB_FALLBACK=true when CSP allows https://api.github.com.`
-      );
+      return null;
     }
 
-    console.warn(
+    warnOnce(
+      `github-api-fallback-${apiUrl}`,
       `[githubApi] API cache unavailable for ${apiUrl}. Using GitHub direct fetch.`,
       apiError
     );
-    return fetchJson(fallbackUrl);
+    try {
+      return await fetchJson(fallbackUrl);
+    } catch (fallbackError) {
+      warnOnce(
+        `github-api-fallback-failed-${apiUrl}`,
+        `[githubApi] Direct GitHub fallback failed for ${fallbackUrl}. Returning local fallback data.`,
+        fallbackError
+      );
+      return null;
+    }
   }
 };
 
-export const fetchGitHubUser = (username) => {
+const getDefaultGitHubUser = (username) => ({
+  login: username,
+  name: "Kaiky Brito",
+  html_url: `https://github.com/${username}`,
+  public_repos: 0,
+  followers: 0,
+  following: 0,
+});
+
+export const fetchGitHubUser = async (username) => {
   const encodedUsername = encodeURIComponent(username);
   const apiUrl = buildApiUrl(`/api/github/users/${encodedUsername}`);
   const fallbackUrl = `https://api.github.com/users/${encodedUsername}`;
-  return fetchWithFallback(apiUrl, fallbackUrl);
+  const data = await fetchWithFallback(apiUrl, fallbackUrl);
+  return data || getDefaultGitHubUser(username);
 };
 
-export const fetchGitHubRepos = (username, queryString = "per_page=100") => {
+export const fetchGitHubRepos = async (
+  username,
+  queryString = "per_page=100"
+) => {
   const encodedUsername = encodeURIComponent(username);
   const query = queryString ? `?${queryString}` : "";
   const apiUrl = buildApiUrl(`/api/github/users/${encodedUsername}/repos${query}`);
   const fallbackUrl = `https://api.github.com/users/${encodedUsername}/repos${query}`;
-  return fetchWithFallback(apiUrl, fallbackUrl);
+  const data = await fetchWithFallback(apiUrl, fallbackUrl);
+  return Array.isArray(data) ? data : [];
 };
