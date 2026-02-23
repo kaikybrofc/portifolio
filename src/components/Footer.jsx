@@ -3,6 +3,14 @@ import { Github, Linkedin, Mail, Heart } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const linkedinUrl =
+    import.meta.env.VITE_LINKEDIN_URL ||
+    import.meta.env.NEXT_PUBLIC_LINKEDIN_URL ||
+    "https://www.linkedin.com";
+  const contactEmail =
+    import.meta.env.VITE_CONTACT_EMAIL ||
+    import.meta.env.NEXT_PUBLIC_CONTACT_EMAIL ||
+    "contato@omnizap.shop";
 
   const socialLinks = [
     {
@@ -13,12 +21,12 @@ const Footer = () => {
     {
       name: "LinkedIn",
       icon: <Linkedin size={20} />,
-      url: "https://linkedin.com",
+      url: linkedinUrl,
     },
     {
       name: "Email",
       icon: <Mail size={20} />,
-      url: "mailto:contact@example.com",
+      url: `mailto:${contactEmail}`,
     },
   ];
 

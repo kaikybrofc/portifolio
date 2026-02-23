@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { NeonText, NeonBox } from "@/components/NeonGlow";
 import { Github, MapPin, Link as LinkIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { fetchGitHubUser } from "@/lib/githubApi";
 
 const AboutSection = () => {
   const [userData, setUserData] = useState(null);
@@ -10,8 +11,7 @@ const AboutSection = () => {
   useEffect(() => {
     const fetchGitHubData = async () => {
       try {
-        const response = await fetch("https://api.github.com/users/kaikybrofc");
-        const data = await response.json();
+        const data = await fetchGitHubUser("kaikybrofc");
         setUserData(data);
       } catch (error) {
         console.error("Error fetching GitHub data:", error);

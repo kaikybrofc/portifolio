@@ -13,8 +13,9 @@ Portfolio pessoal de **Kaiky Brito**, desenvolvido com React + Vite para apresen
 
 ## SEO incluido
 
-- `sitemap.xml`
+- `sitemap.xml` (gerado no build, incluindo posts do blog quando disponiveis)
 - `robots.txt`
+- `rss.xml` (feed do blog)
 - Open Graph tags
 - Twitter Cards
 - Imagem de preview social (`public/preview.png`)
@@ -34,7 +35,7 @@ API cache local: `http://localhost:8787`
 - `npm run dev`: inicia frontend + API de cache em paralelo
 - `npm run dev:web`: inicia apenas o frontend (Vite)
 - `npm run dev:api`: inicia apenas a API de cache (SQLite)
-- `npm run build`: gera build de producao em `dist/`
+- `npm run build`: gera `sitemap.xml` + `rss.xml` e depois build de producao em `dist/`
 - `npm run preview`: serve o build localmente
 - `npm run lint`: executa lint sem warnings
 - `npm run lint:warn`: executa lint com warnings
@@ -61,6 +62,9 @@ Variaveis opcionais:
 - `VITE_USE_RELATIVE_API` (padrao: `true`)
 - `VITE_ALLOW_DIRECT_GITHUB_FALLBACK` (padrao: `true` no `npm run dev`; em producao publica fica desabilitado para evitar CSP)
 - `VITE_ENABLE_VISIT_TRACKING` (padrao: `true` no `npm run dev`, `false` em producao)
+- `VITE_SITE_URL` (URL canônica usada na geracao de `sitemap.xml` e `rss.xml`; padrao `https://omnizap.shop`)
+- `VITE_LINKEDIN_URL` (URL do LinkedIn exibida em contato/footer)
+- `VITE_CONTACT_EMAIL` (email exibido em contato/footer)
 
 ## Deploy estatico e CSP
 
@@ -92,6 +96,18 @@ Endpoints:
 
 - `POST /api/visits` (registro da visita)
 - `GET /api/visits/stats` (total, ultimas 24h, ultimos 7 dias, top paths)
+
+Dashboard:
+
+- `/analytics` (rota protegida: visivel apenas para o owner autenticado)
+
+## Anti-spam em formularios
+
+Contato e comentarios possuem:
+
+- honeypot invisivel
+- limite de tentativas por janela de tempo (via `localStorage`)
+- verificacao humana simples (soma)
 
 ## Tags no Blog (Supabase)
 
@@ -157,6 +173,8 @@ npm run build
 npm run preview
 ```
 
+Durante o `npm run build`, o script `tools/generate-seo-assets.js` tenta buscar posts no Supabase para incluir URLs individuais no `sitemap.xml` e itens no `rss.xml`.
+
 ## Estrutura principal
 
 ```text
@@ -166,6 +184,7 @@ src/
   pages/
 public/
   preview.png
+  rss.xml
   robots.txt
   sitemap.xml
 ```

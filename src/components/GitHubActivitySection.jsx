@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Activity, Clock3, GitFork, Star } from "lucide-react";
 import { NeonBox, NeonText } from "@/components/NeonGlow";
+import { fetchGitHubRepos } from "@/lib/githubApi";
 
 const GITHUB_USERNAME = "kaikybrofc";
 
@@ -35,11 +36,10 @@ const GitHubActivitySection = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(
-          `https://api.github.com/users/${GITHUB_USERNAME}/repos?sort=updated&per_page=18`
+        const data = await fetchGitHubRepos(
+          GITHUB_USERNAME,
+          "sort=updated&per_page=18"
         );
-        if (!response.ok) throw new Error("Falha ao consultar o GitHub.");
-        const data = await response.json();
 
         const activityRepos = data
           .filter((repo) => !repo.fork)

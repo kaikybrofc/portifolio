@@ -10,17 +10,17 @@ import ContactSection from '@/components/ContactSection';
 import Footer from '@/components/Footer';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
-import { useVisitors } from '@/hooks/useVisitors';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { trackPageVisit } from '@/lib/visitTracker';
 
 // Lazy load blog pages to reduce initial bundle size.
 const BlogListPage = lazy(() => import('@/pages/BlogListPage'));
 const BlogPostDetailPage = lazy(() => import('@/pages/BlogPostDetailPage'));
 const BlogPostEditor = lazy(() => import('@/pages/BlogPostEditor'));
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'));
 
 // Component to handle tracking and hash routing on mount
 const HomePage = () => {
-  useVisitors('home');
   const location = useLocation();
 
   useEffect(() => {
@@ -43,11 +43,20 @@ const HomePage = () => {
         <ProjectsSection />
         <GitHubActivitySection />
         <SkillsSection />
-        {/* BlogSection inside home was replaced by the separate Blog routing */}
         <ContactSection />
       </main>
     </>
   );
+};
+
+const RouteVisitTracker = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    trackPageVisit();
+  }, [location.pathname, location.search]);
+
+  return null;
 };
 
 function App() {
@@ -63,6 +72,7 @@ function App() {
       <Router>
         <div className="min-h-screen bg-gray-950 text-white">
           <Header />
+          <RouteVisitTracker />
 
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
@@ -71,6 +81,14 @@ function App() {
               {/* Blog Routes */}
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:id" element={<BlogPostDetailPage />} />
+              <Route
+                path="/analytics"
+                element={
+                  <ProtectedRoute>
+                    <AnalyticsPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Editor Routes (Protected) */}
               <Route

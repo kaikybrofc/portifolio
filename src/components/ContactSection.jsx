@@ -5,6 +5,18 @@ import { Mail, Github, Linkedin, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { useContacts } from "@/hooks/useContacts";
+import {
+  consumeRateLimitAttempt,
+  createMathChallenge,
+  formatRetryTime,
+  getRateLimitStatus,
+  isMathChallengeCorrect,
+} from "@/lib/antiSpam";
+
+const CONTACT_MIN_FILL_MS = 3000;
+const CONTACT_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const CONTACT_RATE_LIMIT_MAX_ATTEMPTS = 3;
+const CONTACT_RATE_LIMIT_KEY = "contact_form";
 
 const ContactSection = () => {
   const [formData, setFormData] = useState({
@@ -12,9 +24,22 @@ const ContactSection = () => {
     email: "",
     message: "",
   });
+  const [websiteField, setWebsiteField] = useState("");
+  const [humanAnswer, setHumanAnswer] = useState("");
+  const [challenge, setChallenge] = useState(() => createMathChallenge());
+  const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
 
   const { addContact, loading } = useContacts();
   const { toast } = useToast();
+
+  const linkedinUrl =
+    import.meta.env.VITE_LINKEDIN_URL ||
+    import.meta.env.NEXT_PUBLIC_LINKEDIN_URL ||
+    "https://www.linkedin.com";
+  const contactEmail =
+    import.meta.env.VITE_CONTACT_EMAIL ||
+    import.meta.env.NEXT_PUBLIC_CONTACT_EMAIL ||
+    "contato@omnizap.shop";
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -24,8 +49,21 @@ const ContactSection = () => {
     }));
   };
 
+  const resetAntiSpamState = () => {
+    setWebsiteField("");
+    setHumanAnswer("");
+    setChallenge(createMathChallenge());
+    setFormStartedAt(Date.now());
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (websiteField.trim()) {
+      // Honeypot preenchido: encerramos silenciosamente para reduzir feedback para bots.
+      resetAntiSpamState();
+      return;
+    }
 
     if (!formData.name || !formData.email || !formData.message) {
       toast({
@@ -36,6 +74,43 @@ const ContactSection = () => {
       return;
     }
 
+    if (Date.now() - formStartedAt < CONTACT_MIN_FILL_MS) {
+      toast({
+        title: "Envio muito rapido",
+        description: "Aguarde alguns segundos e tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isMathChallengeCorrect(challenge, humanAnswer)) {
+      toast({
+        title: "Verificacao humana invalida",
+        description: "Confirme a soma informada para enviar.",
+        variant: "destructive",
+      });
+      setChallenge(createMathChallenge());
+      setHumanAnswer("");
+      return;
+    }
+
+    const rateLimitStatus = getRateLimitStatus(
+      CONTACT_RATE_LIMIT_KEY,
+      CONTACT_RATE_LIMIT_WINDOW_MS,
+      CONTACT_RATE_LIMIT_MAX_ATTEMPTS
+    );
+
+    if (!rateLimitStatus.allowed) {
+      toast({
+        title: "Limite de envios atingido",
+        description: `Tente novamente em ${formatRetryTime(rateLimitStatus.retryAfterMs)}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    consumeRateLimitAttempt(CONTACT_RATE_LIMIT_KEY, CONTACT_RATE_LIMIT_WINDOW_MS);
+
     const result = await addContact(formData);
 
     if (result.success) {
@@ -44,6 +119,7 @@ const ContactSection = () => {
         description: "Obrigado pelo contato. Responderei em breve!",
       });
       setFormData({ name: "", email: "", message: "" });
+      resetAntiSpamState();
     } else {
       toast({
         title: "Erro ao enviar",
@@ -63,13 +139,13 @@ const ContactSection = () => {
     {
       name: "LinkedIn",
       icon: <Linkedin size={24} />,
-      url: "https://linkedin.com",
+      url: linkedinUrl,
       color: "magenta",
     },
     {
       name: "Email",
       icon: <Mail size={24} />,
-      url: "mailto:contact@example.com",
+      url: `mailto:${contactEmail}`,
       color: "accent",
     },
   ];
@@ -115,7 +191,23 @@ const ContactSection = () => {
                 <NeonText color="cyan">Envie uma mensagem</NeonText>
               </h3>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6 relative">
+                <div
+                  className="absolute left-[-9999px] top-auto w-px h-px overflow-hidden"
+                  aria-hidden="true"
+                >
+                  <label htmlFor="website-field">Website</label>
+                  <input
+                    id="website-field"
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={websiteField}
+                    onChange={(event) => setWebsiteField(event.target.value)}
+                  />
+                </div>
+
                 <div>
                   <label htmlFor="name" className="block text-gray-300 mb-2 font-medium">Nome</label>
                   <input
@@ -152,6 +244,21 @@ const ContactSection = () => {
                     required
                     rows={5}
                     className="w-full px-4 py-3 bg-gray-900 border-2 border-cyan-400/30 rounded-lg text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none transition-all resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="contact-human-check" className="block text-gray-300 mb-2 font-medium">
+                    Verificacao humana: quanto e {challenge.left} + {challenge.right}?
+                  </label>
+                  <input
+                    id="contact-human-check"
+                    type="number"
+                    inputMode="numeric"
+                    value={humanAnswer}
+                    onChange={(event) => setHumanAnswer(event.target.value)}
+                    className="w-full px-4 py-3 bg-gray-900 border-2 border-cyan-400/30 rounded-lg text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none transition-all"
+                    required
                   />
                 </div>
 

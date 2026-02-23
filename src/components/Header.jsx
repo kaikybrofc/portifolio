@@ -12,20 +12,18 @@ const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, isOwner } = useAuth();
 
-  const scrollToHashSection = (hash) => {
+  const scrollToHashSection = (hash, offset = 96) => {
     if (!hash) return;
 
     const targetId = hash.replace("#", "");
     const element = document.getElementById(targetId);
     if (!element) return;
 
-    // Compensa o header fixo para a secao nao ficar escondida.
-    const headerOffset = 96;
     const elementTop = element.getBoundingClientRect().top + window.scrollY;
     window.scrollTo({
-      top: Math.max(0, elementTop - headerOffset),
+      top: Math.max(0, elementTop - offset),
       behavior: "smooth",
     });
   };
@@ -44,18 +42,21 @@ const Header = () => {
     { name: "Sobre", href: "/#about" },
     { name: "Projetos", href: "/#projects" },
     { name: "Habilidades", href: "/#skills" },
-    { name: "Blog", href: "/blog" }, // Updated to normal route
+    { name: "Blog", href: "/blog" },
     { name: "Contato", href: "/#contact" },
   ];
+
+  if (isOwner) {
+    navItems.splice(5, 0, { name: "Analytics", href: "/analytics" });
+  }
 
   const handleNavClick = (e, href) => {
     e.preventDefault();
     const closeMenuDelay = isMobileMenuOpen ? 220 : 0;
     setIsMobileMenuOpen(false);
 
-    // If it's the blog route, navigate normally
-    if (href === "/blog") {
-      navigate("/blog");
+    if (!href.includes("#")) {
+      navigate(href);
       window.scrollTo(0, 0);
       return;
     }
@@ -83,6 +84,7 @@ const Header = () => {
     }
 
     navigate(`/${hash}`);
+    delayedScroll();
   };
 
   return (

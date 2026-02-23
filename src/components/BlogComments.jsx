@@ -6,10 +6,25 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/components/ui/use-toast';
 import { Trash2, MessageSquare, Send } from 'lucide-react';
 import LoginButton from '@/components/LoginButton';
+import {
+  consumeRateLimitAttempt,
+  createMathChallenge,
+  formatRetryTime,
+  getRateLimitStatus,
+  isMathChallengeCorrect,
+} from '@/lib/antiSpam';
+
+const COMMENT_MIN_FILL_MS = 2000;
+const COMMENT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const COMMENT_RATE_LIMIT_MAX_ATTEMPTS = 5;
 
 const BlogComments = ({ postId }) => {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [websiteField, setWebsiteField] = useState('');
+  const [humanAnswer, setHumanAnswer] = useState('');
+  const [challenge, setChallenge] = useState(() => createMathChallenge());
+  const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const { currentUser, isOwner } = useAuth();
@@ -42,6 +57,51 @@ const BlogComments = ({ postId }) => {
     e.preventDefault();
     if (!newComment.trim() || !currentUser) return;
 
+    if (websiteField.trim()) {
+      setWebsiteField('');
+      setHumanAnswer('');
+      setChallenge(createMathChallenge());
+      setFormStartedAt(Date.now());
+      return;
+    }
+
+    if (Date.now() - formStartedAt < COMMENT_MIN_FILL_MS) {
+      toast({
+        title: 'Envio muito rapido',
+        description: 'Aguarde alguns segundos e tente novamente.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!isMathChallengeCorrect(challenge, humanAnswer)) {
+      toast({
+        title: 'Verificacao humana invalida',
+        description: 'Confirme a soma para enviar o comentario.',
+        variant: 'destructive',
+      });
+      setChallenge(createMathChallenge());
+      setHumanAnswer('');
+      return;
+    }
+
+    const rateLimitKey = `blog_comment:${postId}`;
+    const rateLimitStatus = getRateLimitStatus(
+      rateLimitKey,
+      COMMENT_RATE_LIMIT_WINDOW_MS,
+      COMMENT_RATE_LIMIT_MAX_ATTEMPTS
+    );
+
+    if (!rateLimitStatus.allowed) {
+      toast({
+        title: 'Limite de comentarios atingido',
+        description: `Tente novamente em ${formatRetryTime(rateLimitStatus.retryAfterMs)}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    consumeRateLimitAttempt(rateLimitKey, COMMENT_RATE_LIMIT_WINDOW_MS);
     setLoading(true);
     try {
       const payload = {
@@ -61,6 +121,10 @@ const BlogComments = ({ postId }) => {
 
       setComments([data[0], ...comments]);
       setNewComment('');
+      setWebsiteField('');
+      setHumanAnswer('');
+      setChallenge(createMathChallenge());
+      setFormStartedAt(Date.now());
       toast({ title: 'Comentário enviado!' });
     } catch (err) {
       toast({ title: 'Erro ao enviar comentário', description: err.message, variant: 'destructive' });
@@ -110,6 +174,21 @@ const BlogComments = ({ postId }) => {
               <AvatarFallback>{currentUser.user_metadata?.user_name?.charAt(0) || 'U'}</AvatarFallback>
             </Avatar>
             <div className="flex-grow">
+              <div
+                className="absolute left-[-9999px] top-auto w-px h-px overflow-hidden"
+                aria-hidden="true"
+              >
+                <label htmlFor={`comment-website-${postId}`}>Website</label>
+                <input
+                  id={`comment-website-${postId}`}
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={websiteField}
+                  onChange={(event) => setWebsiteField(event.target.value)}
+                />
+              </div>
+
               <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
@@ -117,6 +196,23 @@ const BlogComments = ({ postId }) => {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 resize-y mb-3 min-h-[80px]"
                 required
               />
+              <div className="mb-3">
+                <label
+                  htmlFor={`comment-human-check-${postId}`}
+                  className="block text-xs uppercase tracking-wide text-gray-500 mb-2"
+                >
+                  Verificacao humana: quanto e {challenge.left} + {challenge.right}?
+                </label>
+                <input
+                  id={`comment-human-check-${postId}`}
+                  type="number"
+                  inputMode="numeric"
+                  value={humanAnswer}
+                  onChange={(event) => setHumanAnswer(event.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                  required
+                />
+              </div>
               <div className="flex justify-end">
                 <Button
                   type="submit"

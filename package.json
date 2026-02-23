@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "vite --host :: --port 3000",
-    "build": "[ -f tools/generate-llms.js ] && node tools/generate-llms.js; vite build",
+    "dev": "sh -c 'npm run dev:api & API_PID=$!; npm run dev:web; STATUS=$?; kill $API_PID; exit $STATUS'",
+    "dev:web": "vite --host :: --port 3000",
+    "dev:api": "node server/github-cache-server.js",
+    "build": "[ -f tools/generate-llms.js ] && node tools/generate-llms.js; [ -f tools/generate-seo-assets.js ] && node tools/generate-seo-assets.js; vite build",
     "preview": "vite preview --host :: --port 3000",
     "lint": "eslint . --quiet",
     "lint:warn": "eslint ."
