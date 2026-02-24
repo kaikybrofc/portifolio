@@ -31,18 +31,7 @@ const ProjectsSection = () => {
             return new Date(b.updated_at) - new Date(a.updated_at);
           });
 
-        let filteredRepos = sortedRepos.slice(0, 6);
-        const omnizapRepo = nonForkRepos.find(
-          (repo) => repo.name?.toLowerCase() === "omnizap-system"
-        );
-
-        if (
-          omnizapRepo &&
-          !filteredRepos.some((repo) => repo.id === omnizapRepo.id)
-        ) {
-          filteredRepos = [...filteredRepos.slice(0, 5), omnizapRepo];
-        }
-
+        const filteredRepos = sortedRepos.slice(0, 6);
         setRepos(filteredRepos);
       } catch (error) {
         console.error("Error fetching repositories:", error);

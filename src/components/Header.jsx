@@ -12,7 +12,7 @@ const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, isOwner } = useAuth();
+  const { currentUser } = useAuth();
 
   const scrollToHashSection = (hash, offset = 96) => {
     if (!hash) return;
@@ -41,15 +41,10 @@ const Header = () => {
     { name: "Home", href: "/#hero" },
     { name: "Sobre", href: "/#about" },
     { name: "Projetos", href: "/#projects" },
-    { name: "OmniZap", href: "/projetos/omnizap-system" },
     { name: "Habilidades", href: "/#skills" },
     { name: "Blog", href: "/blog" },
     { name: "Contato", href: "/#contact" },
   ];
-
-  if (isOwner) {
-    navItems.splice(navItems.length - 1, 0, { name: "Analytics", href: "/analytics" });
-  }
 
   const handleNavClick = (e, href) => {
     e.preventDefault();

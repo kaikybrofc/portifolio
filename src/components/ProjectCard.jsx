@@ -3,7 +3,6 @@ import { NeonBox } from "@/components/NeonGlow";
 import { Button } from "@/components/ui/button";
 import { Github, ExternalLink, Star, GitFork } from "lucide-react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
 import ReactionButtons from "@/components/ReactionButtons";
 import { CONTENT_REACTION_TYPES } from "@/lib/reactions";
 
@@ -18,8 +17,6 @@ const ProjectCard = ({ project }) => {
     forks_count,
     topics = [],
   } = project;
-  const isOmnizapSystemProject =
-    typeof name === "string" && name.toLowerCase() === "omnizap-system";
 
   return (
     <motion.div
@@ -126,19 +123,6 @@ const ProjectCard = ({ project }) => {
                 <ExternalLink size={18} />
                 <span>Demo</span>
               </a>
-            </Button>
-          )}
-
-          {isOmnizapSystemProject && (
-            <Button
-              asChild
-              variant="outline"
-              className="flex-1 border-cyan-300 text-cyan-300 hover:bg-cyan-300 hover:text-gray-900 transition-all"
-              style={{ boxShadow: "0 0 10px #00ffff" }}
-            >
-              <Link to="/projetos/omnizap-system" className="flex items-center justify-center gap-2">
-                <span>Detalhes</span>
-              </Link>
             </Button>
           )}
         </div>
